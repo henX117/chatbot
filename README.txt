@@ -66,7 +66,7 @@ Before running the chatbot, you need to provide your API keys in the `api_keys.p
 - JOKE_API_KEY: Your joke API key (from official-joke-api.appspot.com)
 
 Usage:
-To start the chatbot, run the `#Hal.py` file. You will be prompted to enter your name. After providing your name, you can interact with the chatbot by typing your messages or commands.
+To start the chatbot for the first time, run the "setup.py file. It will install the required libraries. Then, run the `Hal.py` file. You will be prompted to enter your name. After providing your name, you can interact with the chatbot by typing your messages or commands.
 
 The chatbot supports various commands and intents. You can type "help" or "I need help" to see a list of available commands.
 
@@ -82,7 +82,8 @@ Some key functionalities include:
 You can explore the different commands and intents to discover more functionalities of the chatbot.
 
 Files:
-- `#Hal.py`: The main chatbot file that initializes the chatbot and handles user interactions.
+- `setup.py`: The setup file which installs all of the required libraries.
+- `Hal.py`: The main chatbot file that initializes the chatbot and handles user interactions.
 - `intents.py`: Contains the implementation of the chatbot's intents and logical processing.
 - `api_keys.py`: Stores the API keys used by the chatbot (you need to provide your own keys).
 
@@ -97,4 +98,6 @@ The chatbot project uses various libraries and APIs, including:
 
 Feel free to customize and extend the chatbot based on your requirements. If you have any questions or issues, please don't hesitate to reach out.
 
-Enjoy chatting with Hal!
+Authors:
+- Henry G
+- Isaac H
