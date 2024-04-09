@@ -1,14 +1,14 @@
 import tkinter as tk
 from tkinter import scrolledtext
 from Hal import Chatbot
-import api_keys
+from logic.api_keys import OPENAI_API_KEY
 
 class ChatbotGUI:
     def __init__(self, master):
         self.master = master
         master.title("Chatbot")
         
-        self.chatbot = Chatbot(api_keys.OPENAI_API_KEY)
+        self.chatbot = Chatbot(OPENAI_API_KEY)
         
         self.name_frame = tk.Frame(master)
         self.name_frame.pack(pady=10)
