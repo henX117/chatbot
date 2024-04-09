@@ -29,5 +29,5 @@ if __name__ == "__main__":
     api_key = api_keys.OPENAI_API_KEY
     chatbot = Chatbot(api_key)
     chatbot.name = name
-    chatbot.main()  # Call the main() method here
+    chatbot.main()  # Call the main() method here!
     
