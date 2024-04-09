@@ -51,7 +51,15 @@ class logical:
             "rock paper scissors": "play the rock paper scissors game",
             "windows": "shows what version of windows OS is using",
             "remind": "set a reminder",
-            "wiki": "search Wikipedia" }
+            "wiki": "search Wikipedia",
+            "lottery": "generates random lottery numbers",
+            "random numbers": "generates random numbers in a specific range that the user chooses",
+            "generate image": "generates an image based on user input (only works if you have an openai api key)",
+            "roll a dice": "rolls a dice and gives the user a number",
+            "enable tts": "enables text to speech",
+            "disable tts": "disables text to speech",
+            "copy": "the bot will copy the next thing that the user types",
+            "calculate interest": "opens the compound interest calculator", }
 
     def analyze_mood(self, text):
         positive_words = ['happy','excited','amazing','great','fantastic']
@@ -84,6 +92,22 @@ class logical:
         self.speak_and_return (number)
         return ""
         
+    def dalle(self):
+        resp = str(input("Type the image that you would like to be generated\n"))
+        try:
+            client = OpenAI(OPENAI_API_KEY)
+            response = client.images.generate(
+                model="dall-e-3",
+                prompt=resp,
+                size="1024x1024",
+                quality="standard",
+                n=1,
+            )
+            print("image generated. beginning to create URL")
+            image_url = response.data[0].url
+            return image_url
+        except Exception as P:
+            return self.speak_and_return (f"Sorry, {self.name}! I had an issue trying to generate that image...\n{P}")
 
     def morningornah(self):
         current_time = datetime.now()
@@ -694,5 +718,6 @@ def get_intents(logical_instance):
         "random number": (["random number", "random num", "random number generator", "generate a random number", "random num generator"], logical_instance.randomnumgen),
         "lottery": (["lottery","I want to play the lottery", "give me some lottery numbers", "give me lottery numbers", "lottery nums", "lottery digits"], logical_instance.lottery),
         "dice": (["dice roll", "lets roll a dice","dice","roll a dice"], logical_instance.diceroll),
+        "image generator": (["generate an image", "image generator", "create an image", "make an image","make a picture", "image gen", "gen image", "dalle","i want to use dalle", "i want to create a picture",], logical_instance.dalle),
         }
     return intents
