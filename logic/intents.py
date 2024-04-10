@@ -6,6 +6,7 @@ import webbrowser
 from spacy.matcher import Matcher
 import warnings
 import requests
+import platform
 import random
 import wikipedia
 import inflect
@@ -59,7 +60,8 @@ class logical:
             "enable tts": "enables text to speech",
             "disable tts": "disables text to speech",
             "copy": "the bot will copy the next thing that the user types",
-            "calculate interest": "opens the compound interest calculator", }
+            "calculate interest": "opens the compound interest calculator",
+            "merge pdf": "merges pdf files into one. place the files in the brain 2 directory." }
 
     def analyze_mood(self, text):
         positive_words = ['happy','excited','amazing','great','fantastic']
@@ -510,13 +512,10 @@ class logical:
             f"I'm here to assist you with anything. What's the first thing on your agenda today, {self.name}?",
             f"Welcome {self.name}. If you need anything specific, type 'help'.",
             f"Hey {self.name}, nice to see you! I got a nice joke cooked up. ask me to tell you a joke!",
-            f"{self.name}. I didn't know this until now but... Did you know that {self.time}?",
         ]
         response = random.choice(possible_intro)
-        formatted_response = response.format(name=self.name, morningornah=self.morningornah())
-        self.speak(formatted_response)
-        print(formatted_response)
-        return formatted_response
+        self.speak_and_return (response)
+        return response
 
     def timeconversion(self):
         print("TIME CONVERSION!")
@@ -597,6 +596,32 @@ class logical:
                 self.main()
             else:
                 print("-----------------------------")
+
+    def merge_pdfs(self):
+        self.speak_and_return ("make sure to have the pdfs in the 'brain 2' folder!")
+        X = input("Press any key to continue...")
+        #print(f"sys.path: {sys.path}") #debug line
+        #print(f"Current working directory: {os.getcwd()}") #debugging line
+        try:
+            intents_dir = os.path.dirname(os.path.abspath(__file__))
+            pdfs_dir = os.path.join(intents_dir, 'pdfs')
+            sys.path.insert(0, pdfs_dir)
+
+            from logic.pdfs.pdfmerger import PDFMerger
+            merger = PDFMerger()
+            merger.merge_pdfs()
+
+            delete_files = input("Do you want to delete the original PDF files? (Y/N): ")
+            merger.clean_up(os.getcwd(), delete_files)
+
+            merged_file_path = os.path.join(os.getcwd(), "Final_pdf.pdf")
+            if platform.system() == 'Windows':
+                os.startfile(merged_file_path)
+            else:
+                subprocess.run(['open', merged_file_path], check = True)
+            return self.speak_and_return("Files have been merged successfully!")
+        except Exception as e:
+            return self.speak_and_return(f"An error occurred while merging PDFs: {e}")
 
     def tell_joke(self):
         response = requests.get("https://official-joke-api.appspot.com/random_joke")
@@ -719,5 +744,6 @@ def get_intents(logical_instance):
         "lottery": (["lottery","I want to play the lottery", "give me some lottery numbers", "give me lottery numbers", "lottery nums", "lottery digits"], logical_instance.lottery),
         "dice": (["dice roll", "lets roll a dice","dice","roll a dice"], logical_instance.diceroll),
         "image generator": (["generate an image", "image generator", "create an image", "make an image","make a picture", "image gen", "gen image", "dalle","i want to use dalle", "i want to create a picture",], logical_instance.dalle),
+        "merge pdfs": (["merge pdfs", "combine pdfs", "merge pdf files"], logical_instance.merge_pdfs),
         }
     return intents

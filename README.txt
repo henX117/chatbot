@@ -25,6 +25,7 @@ webbrowser
 - AppOpener
 - gtts
 - playsound
+- PyPDF4 
 
 You can install these libraries using pip. For example:
 1) Spacy
@@ -54,6 +55,9 @@ pip install gTTS
 8) playsound
 pip install playsound
 
+9) PyPDF4 
+pip install PyPDF4 
+
 
 Additionally, make sure you have the necessary language models downloaded for spacy. You can download them by running:
 python -m spacy download en_core_web_sm
@@ -73,11 +77,13 @@ The chatbot supports various commands and intents. You can type "help" or "I nee
 Some key functionalities include:
 - Saying "open [application_name]" to open a specific application
 - Asking for the current time or weather information
-- Requesting jokes or playing Rock Paper Scissors
+- Requesting jokes or playing games
 - Performing math calculations
 - Analyzing text using spacy
 - Setting reminders
 - Searching Wikipedia
+- merging pdf's
+- and more!
 
 You can explore the different commands and intents to discover more functionalities of the chatbot.
 
@@ -95,9 +101,9 @@ The chatbot project uses various libraries and APIs, including:
 - OpenAI: For language model integration
 - weatherstack.com: For retrieving weather information
 - official-joke-api.appspot.com: For fetching jokes
+- and many other libraries previously mentioned.
 
-Feel free to customize and extend the chatbot based on your requirements. If you have any questions or issues, please don't hesitate to reach out.
+If you have any questions, issues, or suggestions please don't hesitate to reach out!
 
 Authors:
 - Henry G
-- Isaac H
