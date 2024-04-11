@@ -226,49 +226,64 @@ class logical:
             return self.speak_and_return(f"{command} does not want to cooperate and close. try again??")
 
     def analyze_sentence(self, command): #Problem! "An error occurred [Errno 13] Permission denied: 'data_visC.html'"
-        try:
-            from spacy import displacy
-            self.speak("Do you want a large analysis or small analysis?")
-            which_nlp = input("Which analysis do you want?'small' or 'large'?\n").strip().lower()
-            if which_nlp == 'small':
-                nlp = spacy.load("en_core_web_sm")
-                doc = nlp(command)
-                sentences = list(doc.sents)
-                html_ent1 = displacy.render(sentences, style="ent")
-                html_dep1 = displacy.render(sentences, style="dep")
-                self.speak("Small analysis, got it.")
-                html_combined1 = "<html><head><title><SpaCy Analysis</title></head><body>" + html_ent1 + html_dep1 + "</body></html>"
-                with open("data_visC.html", "w", encoding="utf-8") as f:
-                    f.write(html_combined1)
-                try:
-                    if os.path.exists("data_visC.html") and os.access("data_visCG.html", os.R_OK):
-                        webbrowser.open("data_visC.html")
-                except (LookupError):
-                    print("couldn't open the HTML. Try and find it in your files!")
+        self.speak("Do you want a text summarization or a visualization analysis?")
+        which_analysis = input("Which analysis do you want?\nText summary (1)\nvisualization (2)\n-->")
+        if which_analysis =='1':
+            try:
+                from .utils.text_sum import TextSummarizer
+                num_sentences = int(input("Enter the number of sentences in the summary: "))
+                summarizer = TextSummarizer()
+                summary = summarizer.summarize(command, num_sentences)
+                return self.speak_and_return(f"Here's the summary:\n{summary}")
+            except Exception as L:
+                self.speak(f"Sorry, {self.name}. I had an issue with getting analysis on that. I'll print the error code below")
+                return L
+        elif which_analysis =='2':
+            try:
+                from spacy import displacy
+                self.speak("Do you want a large analysis or small analysis?")
+                which_nlp = input("Which analysis do you want?'small' or 'large'?\n").strip().lower()
+                if which_nlp == 'small':
+                    nlp = spacy.load("en_core_web_sm")
+                    doc = nlp(command)
+                    sentences = list(doc.sents)
+                    html_ent1 = displacy.render(sentences, style="ent")
+                    html_dep1 = displacy.render(sentences, style="dep")
+                    self.speak("Small analysis, got it.")
+                    html_combined1 = "<html><head><title><SpaCy Analysis</title></head><body>" + html_ent1 + html_dep1 + "</body></html>"
+                    with open("data_visC.html", "w", encoding="utf-8") as f:
+                        f.write(html_combined1)
+                    try:
+                        if os.path.exists("data_visC.html") and os.access("data_visCG.html", os.R_OK):
+                            webbrowser.open("data_visC.html")
+                    except (LookupError):
+                        print("couldn't open the HTML. Try and find it in your files!")
             # ------------------------------------------------------------------------
-            elif which_nlp == 'large':
-                nlp = spacy.load("en_core_web_lg")
-                print("large language model loaded")
-                doc = nlp(command)
-                print("sentence converted into doc")
-                sentences = list(doc.sents)
-                print("sentence converted to list")
-                self.speak("large analysis, got it.")
-                html_ent = displacy.render(sentences, style="ent")
-                html_dep = displacy.render(sentences, style='dep')
-                html_combined = "<html><head><title><SpaCy Analysis</title></head><body>" + html_ent + html_dep + "</body></html>"
-                print("HTML has been rendered")
+                elif which_nlp == 'large':
+                    nlp = spacy.load("en_core_web_lg")
+                    print("large language model loaded")
+                    doc = nlp(command)
+                    print("sentence converted into doc")
+                    sentences = list(doc.sents)
+                    print("sentence converted to list")
+                    self.speak("large analysis, got it.")
+                    html_ent = displacy.render(sentences, style="ent")
+                    html_dep = displacy.render(sentences, style='dep')
+                    html_combined = "<html><head><title><SpaCy Analysis</title></head><body>" + html_ent + html_dep + "</body></html>"
+                    print("HTML has been rendered")
 
-                with open("data_visCG.html", "w", encoding="utf-8") as f:
-                    f.write(html_combined)
-                try:
-                    if os.path.exists("data_visCG.html") and os.access("data_visCG.html", os.R_OK):
-                        webbrowser.open("data_visCG.html")
-                        self.speak(f"okay, I'm finished analyzing the file. I'll display the contents to your screen {self.name}")
-                except (LookupError):
-                    print("couldn't open the HTML. Try and find it in your files!")
-        except (ValueError, KeyError, SyntaxError):
-            self.speak_and_return("something went so wrong with that. wtf did you do?")
+                    with open("data_visCG.html", "w", encoding="utf-8") as f:
+                        f.write(html_combined)
+                    try:
+                        if os.path.exists("data_visCG.html") and os.access("data_visCG.html", os.R_OK):
+                            webbrowser.open("data_visCG.html")
+                            self.speak(f"okay, I'm finished analyzing the file. I'll display the contents to your screen {self.name}")
+                    except (LookupError):
+                        print("couldn't open the HTML. Try and find it in your files!")
+            except (ValueError, KeyError, SyntaxError):
+                self.speak_and_return("something went so wrong with that. wtf did you do?")
+        else:
+            return "Sorry, an error has occurred. restarting..." and self.main()
 
     def cls(self):
         os.system('cls' if os.name == 'nt' else 'clear')
@@ -623,6 +638,14 @@ class logical:
             else:
                 print("-----------------------------")
 
+    def checkapass(self):
+        from .utils.passcheck import passwords
+        password = input("Enter a password to check it's strenght")
+        if passwords.is_strong_password(password):
+            return self.speak_and_return("Strong password! Good job!")
+        else:
+            return self.speak_and_return("Weak password. Fix dat!")
+
     def merge_pdfs(self): #problem! "An error occurred while merging PDFs: No module named 'pdfs'"
         self.speak_and_return ("Make sure to have the PDFs in the 'PLACE_PDFs_HERE' folder!")
         X = input("Press any key to continue...")
@@ -771,5 +794,6 @@ def get_intents(logical_instance):
         "dice": (["dice roll", "lets roll a dice","dice","roll a dice"], logical_instance.diceroll),
         "image generator": (["generate an image", "image generator", "create an image", "make an image","make a picture", "image gen", "gen image", "dalle","i want to use dalle", "i want to create a picture",], logical_instance.dalle),
         "merge pdfs": (["merge pdfs", "combine pdfs", "merge pdf files"], logical_instance.merge_pdfs),
+        "pass check": (["password", "check my password", "is my password good", "is my passwork weak","strong password", "hows this password", "password strength", "check password strength", "check a pass",], logical_instance.checkapass),
         }
     return intents

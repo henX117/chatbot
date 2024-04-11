@@ -33,7 +33,9 @@ if __name__ == "__main__":
             name = input("name:")
     except KeyboardInterrupt:
         print("You done fucked up the whole thing.")
-        quit()
+        x = input("press any key to quit")
+    except Exception as L:
+        print(f"Exception Error: {L}")
     api_key = OPENAI_API_KEY
     chatbot = Chatbot(api_key, enable_tts=enable_tts)
     chatbot.name = name
