@@ -43,6 +43,9 @@ def gettts():
 def getplaysound():
     install_package('playsound')
 
+def getPDF():
+    install_package('PyPDF4')
+
 print("Hello, User!\nThis file will install all the necessary libraries to run the chatbot!\nYou can also do this process manually if you would like to! Check the README for more information!")
 
 try:
@@ -94,17 +97,24 @@ try:
     else:
         print("Playsound not installed.")
 
+    wantPDF = input("Type 1 if you want PyDF4")
+    if wantPDF == '1':
+        getPDF()
+    else:
+        print("Not installing.")
+
 except Exception as e:
     print(f"An error occurred --> {e}")
 
 print("All done! This file can now be safely closed.")
 print("-------------------------")
-print("READ ME and CHATBOT will be automatically opened. This file can now be safely closed!")
+print("READ ME and CHATBOT will be automatically opened. Type anything to now close this file...")
 print("-------------------------")
-
 try:
     script_directory = os.path.dirname(os.path.abspath(__file__))
     readme_file = os.path.join(script_directory, "README.txt")
     os.startfile(readme_file)
 except Exception as e:
     print(f"An error occurred --> {e}")
+x = input("")
+quit()

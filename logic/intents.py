@@ -23,6 +23,10 @@ from pathlib import Path
 from openai import OpenAI
 from .api_keys import OPENAI_API_KEY, WEATHER_API_KEY
 
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir)
+sys.path.insert(0, parent_dir)
+
 class logical:
     def __init__(self, api_key):
         self.chatbot = 'Hal'
@@ -91,10 +95,13 @@ class logical:
         whatrange = int(input("Enter starting range -> "))
         lastrange = int(input("Enter ending range -> "))
         number = random.randint(whatrange,lastrange)
-        self.speak_and_return (number)
+        if self.ENABLE_TTS:
+            self.speak_and_return (number)
+        else:
+            print (number)
         return ""
         
-    def dalle(self):
+    def dalle(self): #does not work!
         resp = str(input("Type the image that you would like to be generated\n"))
         try:
             client = OpenAI(OPENAI_API_KEY)
@@ -147,14 +154,14 @@ class logical:
 
     def diceroll(self):
         print("---------------------------------------------------")
-        from games import DiceRoll
+        from logic.games import DiceRoll
         dice_game = DiceRoll()
         result = dice_game.roll()
         return self.speak_and_return(f"You rolled a {result}!")
 
-    def rockpaperscissors(self, user_input=None):
+    def rockpaperscissors(self, user_input=None): #does not work!
         print("---------------------------------------------------")
-        from games import RockPaperScissors
+        from logic.games import RockPaperScissors
         game = RockPaperScissors() #this creates instance of the game!
         game.play_game() #call the play_game method
         responses = [
@@ -167,7 +174,10 @@ class logical:
 
     def ineedhelp(self):
         os.system('cls' if os.name == 'nt' else 'clear')
-        self.speak_and_return(f"here is a list of helpful commands,{self.name}.")
+        if self.ENABLE_TTS:
+            self.speak_and_return(f"Here is a list of helpful commands, {self.name}.")
+        else:
+            print(f"here is a list of helpful commands,{self.name}.")
         return self.commands
 
     def extract_app_name(self, command):
@@ -192,8 +202,10 @@ class logical:
                 print(f"Error trying to open {app_name}: {str(e)}")
         else:
             print("Sorry, I couldn't identify the app that you want to open.")
-        print(self.matcher)
-        self.speak_and_return(f"what else would you like to do, {self.name}?")
+        if self.ENABLE_TTS:
+            self.speak_and_return(f"what else would you like to do, {self.name}?")
+        else:
+            print(f"What else would you like to do, {self.name}?")
         return ""
 
     def closeapp(self):
@@ -201,12 +213,13 @@ class logical:
         command = input(f"What app do you want to close, {self.name}?")
         try:
             from AppOpener import close
-            (f"attempting to close{command}")
+            print(f"attempting to close{command}")
             close(command)
+            return""
         except RuntimeError:
             return self.speak_and_return(f"{command} does not want to cooperate and close. try again??")
 
-    def analyze_sentence(self, command):
+    def analyze_sentence(self, command): #Problem! "An error occurred [Errno 13] Permission denied: 'data_visC.html'"
         try:
             from spacy import displacy
             self.speak("Do you want a large analysis or small analysis?")
@@ -331,7 +344,10 @@ class logical:
     def time(self):
         d = datetime.now()
         time_str = d.strftime("%I:%M %p")
-        return self.speak(f"It's currently {time_str}")
+        if self.ENABLE_TTS:
+            return self.speak(f"It's currently {time_str}")
+        else:
+            return f"It's currently {time_str}"
 
     def handle_greeting(self, user_input=None):
         greeting_responses = [
@@ -395,7 +411,7 @@ class logical:
         release = platform.release()
         return self.speak_and_return(f"{os_name} {release} Version {version}")
 
-    def oopsies(self):
+    def oopsies(self): #lets build up this function.
         return self.speak_and_return("its okay, no worries.")
 
     def ifeelgood(self):
@@ -407,13 +423,12 @@ class logical:
         X = random.choice(responses)
         return self.speak_and_return(X)
 
-    def ifeelbad(self):  # add isaacs thing. get lottery numbers
-        lotto = random.randint(1000000, 99999099)
+    def ifeelbad(self):
         responses = [
             "Oh. Sorry to hear that.",
             "I'm sorry to hear that.",
             "Life has its ups and downs. Want to hear a joke to cheer up? you can say, 'tell me a joke",
-            f"Oh cheer up {self.name}.. Here's some lottery numbers. Go have some fun! \n The numbers are {lotto}",
+            f"Oh cheer up {self.name}..",
         ]
         return self.speak_and_return(random.choice(responses))
 
@@ -473,8 +488,10 @@ class logical:
         return ""
 
     def angy(self):
-        return self.speak(f"Alright, {self.name} you are sounding a little angry.")
-
+        if self.ENABLE_TTS:
+            return self.speak(f"Alright, {self.name} you are sounding a little angry.")
+        else:
+            return f"Alright, {self.name}, you're sounding a little angry.."
     def copy(self):
         responses1 = [
             f"alright, {self.name}. I'll copy the next thing you say.",
@@ -487,8 +504,10 @@ class logical:
         repeat = str(input(""))
         print("here we go:")
         try:
-            self.speak_and_return(repeat)
-            return ""
+            if self.ENABLE_TTS:
+                return self.speak_and_return(repeat)
+            else:
+                return (repeat)
         except (SystemError):
             print("I will not do that!")
 
@@ -597,7 +616,7 @@ class logical:
             else:
                 print("-----------------------------")
 
-    def merge_pdfs(self):
+    def merge_pdfs(self): #problem! "An error occurred while merging PDFs: No module named 'pdfs'"
         self.speak_and_return ("make sure to have the pdfs in the 'brain 2' folder!")
         X = input("Press any key to continue...")
         #print(f"sys.path: {sys.path}") #debug line
@@ -606,8 +625,7 @@ class logical:
             intents_dir = os.path.dirname(os.path.abspath(__file__))
             pdfs_dir = os.path.join(intents_dir, 'pdfs')
             sys.path.insert(0, pdfs_dir)
-
-            from logic.pdfs.pdfmerger import PDFMerger
+            from pdfs.pdfmerger import PDFMerger 
             merger = PDFMerger()
             merger.merge_pdfs()
 
@@ -708,7 +726,7 @@ class logical:
 def get_intents(logical_instance):
     intents = {
         "cls": (["cls", "clear the screen"], logical_instance.cls),
-        "help": (["i need help", "can you assist me", "how does this work", "show me the available commands"], logical_instance.ineedhelp),
+        "help": (["i need help", "can you assist me", "how does this work", "show me the available commands","help","capabilities","commands"], logical_instance.ineedhelp),
         "time": (["what time is it", "tell me the time now", "could you give me the time", "time check"], logical_instance.time),
         "open app": (["open an app", "I want to fucking open an app", "I want to open an app", "i want to open an application", "launch an app for me", "start Spotify", "open Chrome"], logical_instance.openapp),
         "close app": (["close an application", "shut down an app", "close Chrome", "shut Spotify"], logical_instance.closeapp),
