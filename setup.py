@@ -46,6 +46,9 @@ def getplaysound():
 def getPDF():
     install_package('PyPDF4')
 
+def getpyttsx3():
+    install_package('pyttsx3')
+
 print("Hello, User!\nThis file will install all the necessary libraries to run the chatbot!\nYou can also do this process manually if you would like to! Check the README for more information!")
 
 try:
@@ -97,11 +100,17 @@ try:
     else:
         print("Playsound not installed.")
 
-    wantPDF = input("Type 1 if you want PyDF4")
+    wantPDF = input("Type 1 if you want PyDF4 ")
     if wantPDF == '1':
         getPDF()
     else:
         print("Not installing.")
+    
+    wantpyttsx3 = input("Type 1 to install pyttsx3 ")
+    if wantpyttsx3 == '1':
+        getpyttsx3()
+    else:
+        print("Not installing")
 
 except Exception as e:
     print(f"An error occurred --> {e}")

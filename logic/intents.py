@@ -22,17 +22,17 @@ import subprocess
 from pathlib import Path
 from openai import OpenAI
 from .api_keys import OPENAI_API_KEY, WEATHER_API_KEY
-
+import pyttsx3
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
 sys.path.insert(0, parent_dir)
 
 class logical:
-    def __init__(self, api_key):
+    def __init__(self, api_key=None):
         self.chatbot = 'Hal'
         self.fullchatbot = 'Halsey'
         self.name = ''
-        self.client = OpenAI(api_key=api_key)
+        self.client = OpenAI(api_key=api_key) if api_key else None
         self.ENABLE_TTS = True
         self.reminders = []
         self.nlp = spacy.load("en_core_web_lg")
@@ -133,20 +133,27 @@ class logical:
     def speak(self, message):
         if not self.ENABLE_TTS:
             return ""
-        import playsound
-        try:
-            speech_file_path = Path(__file__).parent / "speech.mp3"
-            response = self.client.audio.speech.create(
-                model="tts-1",
-                voice="nova",
-                input=message,
-            )
-            audio_content = response.content
-            with open(speech_file_path, 'wb') as audio_file:
-                audio_file.write(audio_content)
-            playsound.playsound(str(speech_file_path), True)
-        except Exception as e:
-            print(f"An error occurred: {e}")
+        if self.client is None:
+            engine = pyttsx3.init()
+            voices = engine.getProperty('voices')
+            engine.setProperty('voice', voices[1].id)
+            engine.say(message)
+            engine.runAndWait()
+        else:
+            import playsound
+            try:
+                speech_file_path = Path(__file__).parent / "speech.mp3"
+                response = self.client.audio.speech.create(
+                    model="tts-1",
+                    voice="nova",
+                    input=message,
+                )
+                audio_content = response.content
+                with open(speech_file_path, 'wb') as audio_file:
+                    audio_file.write(audio_content)
+                playsound.playsound(str(speech_file_path), True)
+            except Exception as e:
+                print(f"An error occurred: {e}")
 
     def speak_and_return(self, message):
         self.speak(message)
@@ -170,8 +177,7 @@ class logical:
         ]
         X = random.choice(responses)
         return self.speak_and_return (X)
-        
-
+    
     def ineedhelp(self):
         os.system('cls' if os.name == 'nt' else 'clear')
         if self.ENABLE_TTS:
@@ -534,6 +540,7 @@ class logical:
         ]
         response = random.choice(possible_intro)
         self.speak_and_return (response)
+        print(response)
         return response
 
     def timeconversion(self):
@@ -617,27 +624,29 @@ class logical:
                 print("-----------------------------")
 
     def merge_pdfs(self): #problem! "An error occurred while merging PDFs: No module named 'pdfs'"
-        self.speak_and_return ("make sure to have the pdfs in the 'brain 2' folder!")
+        self.speak_and_return ("Make sure to have the PDFs in the 'PLACE_PDFs_HERE' folder!")
         X = input("Press any key to continue...")
-        #print(f"sys.path: {sys.path}") #debug line
-        #print(f"Current working directory: {os.getcwd()}") #debugging line
+
         try:
-            intents_dir = os.path.dirname(os.path.abspath(__file__))
-            pdfs_dir = os.path.join(intents_dir, 'pdfs')
-            sys.path.insert(0, pdfs_dir)
-            from pdfs.pdfmerger import PDFMerger 
+            from logic.pdfs.pdfmerger import PDFMerger 
             merger = PDFMerger()
-            merger.merge_pdfs()
-
+            input_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "PLACE_PDFs_HERE") #<-- name of input file
+            os.makedirs(input_dir, exist_ok=True)
+            merged_file_path = merger.merge_pdfs(input_dir)
+            
             delete_files = input("Do you want to delete the original PDF files? (Y/N): ")
-            merger.clean_up(os.getcwd(), delete_files)
+            if delete_files.lower() == 'y':
+                merger.clean_up(input_dir)
+                print("Original PDFs have been deleted")
 
-            merged_file_path = os.path.join(os.getcwd(), "Final_pdf.pdf")
-            if platform.system() == 'Windows':
-                os.startfile(merged_file_path)
+            if os.path.exists(merged_file_path):
+                if platform.system() == 'Windows':
+                    os.startfile(merged_file_path)
+                else:
+                    subprocess.run(['open', merged_file_path], check = True)
+                return self.speak_and_return("Files have been merged successfully!\nWhat's next?")
             else:
-                subprocess.run(['open', merged_file_path], check = True)
-            return self.speak_and_return("Files have been merged successfully!")
+                return self.speak_and_return("The merged PDF could not be found.")
         except Exception as e:
             return self.speak_and_return(f"An error occurred while merging PDFs: {e}")
 
@@ -649,8 +658,7 @@ class logical:
             punchline = joke['punchline']
             print(f"{setup}\n{punchline}")
             alltogether = setup + punchline
-            self.speak(f"{alltogether}.")
-            return ""
+            return self.speak_and_return (alltogether)
         else:
             return f"{self.name}, I couldn't fetch a joke right now. Maybe this is a joke."
 

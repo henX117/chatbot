@@ -7,12 +7,13 @@ This project is a chatbot named Hal (short for Halsey) implemented in Python. Th
 - Performing text analysis
 - Solving math problems
 - Telling jokes and providing weather information
-- Playing games like Rock Paper Scissors
+- Playing games
 - Handling greetings and conversations
 - Setting reminders
 - Searching Wikipedia
 - Generating random numbers
-- And more!
+- merging PDF's
+- and more!
 
 Prerequisites:
 Before running the chatbot, ensure that you have the following libraries installed:
@@ -26,6 +27,7 @@ webbrowser
 - gtts
 - playsound
 - PyPDF4 
+- pyttsx3
 
 You can install these libraries using pip. For example:
 1) Spacy
@@ -58,6 +60,8 @@ pip install playsound
 9) PyPDF4 
 pip install PyPDF4 
 
+10) pyttsx3
+pip install pyttsx3
 
 Additionally, make sure you have the necessary language models downloaded for spacy. You can download them by running:
 python -m spacy download en_core_web_sm
