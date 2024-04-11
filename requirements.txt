@@ -1,0 +1,11 @@
+spacy
+webbrowser
+openai
+requests
+wikipedia
+inflect
+AppOpener
+gtts
+playsound
+PyPDF4 
+pyttsx3
