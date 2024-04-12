@@ -52,7 +52,11 @@ def getpyttsx3():
 def getsympy():
     install_package('sympy')
 
+def getimg2pdf():
+    install_package('img2pdf')
+
 print("Hello, User!\nThis file will install all the necessary libraries to run the chatbot!\nYou can also do this process manually if you would like to! Check the README for more information!")
+print("--------------------------------------------------------------------------------------------------------------------------")
 
 try:
     wantspacy = input("Please type 1 if you would like to install spacy automatically. Else, please type anything to continue... ")
@@ -120,6 +124,12 @@ try:
         getsympy()
     else:
         print("skipping sympy install...")
+    
+    wantimg2pdf = input ("Type 1 to install img2pdf")
+    if wantimg2pdf == '1':
+        getimg2pdf()
+    else:
+        print("not installed")
 
 except Exception as e:
     print(f"An error occurred --> {e}")
