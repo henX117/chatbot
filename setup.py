@@ -49,6 +49,9 @@ def getPDF():
 def getpyttsx3():
     install_package('pyttsx3')
 
+def getsympy():
+    install_package('sympy')
+
 print("Hello, User!\nThis file will install all the necessary libraries to run the chatbot!\nYou can also do this process manually if you would like to! Check the README for more information!")
 
 try:
@@ -111,6 +114,12 @@ try:
         getpyttsx3()
     else:
         print("Not installing")
+    
+    wantsympy = input ("Type 1 to install sympy")
+    if wantsympy == '1':
+        getsympy()
+    else:
+        print("skipping sympy install...")
 
 except Exception as e:
     print(f"An error occurred --> {e}")

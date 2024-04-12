@@ -67,8 +67,6 @@ class logical:
             "calculate interest": "opens the compound interest calculator",
             "merge pdf": "merges pdf files into one. place the files in the brain 2 directory." }
 
-    def analyze_mood(self, text):
-        positive_words = ['happy','excited','amazing','great','fantastic']
 
     def lottery(*args):
         while True:
@@ -313,9 +311,28 @@ class logical:
             return self.speak_and_return(f'alrighty. What do you want to do now, {self.name}?')
 
     def math(self):
-        from ast import literal_eval
-        x = input("input a math equation")
-        return self.speak_and_return(f"Heres your answer: {eval(x)}")
+        from .utils.math import MathHelper
+        math_helper = MathHelper()
+        user_input = input("What math operation would you like to perform? ").lower()
+        operation = math_helper.find_operation(user_input)
+        if operation == 'derivative':
+            expression = input("Enter the mathematical expression: ")
+            result = math_helper.derivative(expression)
+            return self.speak_and_return(f"the derivative is {result}")
+        if operation:
+            num_args = 2 if operation != 'square root' else 1
+            args = []
+            for i in range(num_args):
+                arg = float(input(f"Enter argument {i + 1}: "))
+                args.append(arg)
+
+            try:
+                result = math_helper.perform_operation(user_input, *args)
+                return self.speak_and_return(f"The result is: {result}")
+            except Exception as L:
+                return self.speak_and_return (L)
+        else:
+            return self.speak_and_return("Unsupported math operation")
 
     def thanks(self):
         thank_responses = [
@@ -638,6 +655,43 @@ class logical:
             else:
                 print("-----------------------------")
 
+    def png_to_pdf(self):
+        from .pdfs.pdfconverter import PNGToPDFConverter
+        png_directory = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "PLACE_PDFs_HERE")
+        png_paths = []
+        
+        print("Enter the names of the PNG files (without extension) you want to convert (or press Enter to finish):")
+        while True:
+            png_name = input().strip()
+            if png_name == "":
+                break
+            png_path = os.path.join(png_directory, f"{png_name}.png")
+            if os.path.exists(png_path):
+                png_paths.append(png_path)
+                print(f"File '{png_name}.png' added for conversion.")
+            else:
+                print(f"File '{png_name}.png' not found in the 'PLACE_PDFs_HERE' folder.")
+        
+        if len(png_paths) == 0:
+            return self.speak_and_return("No valid PNG files were provided.")
+        
+        output_filename = "output.pdf"
+        output_path = os.path.join(png_directory, output_filename)
+        
+        converter = PNGToPDFConverter()
+        try:
+            success = converter.convert(png_paths, output_path)
+            if success:
+                print(f"PNG to PDF conversion completed successfully. Output file: {output_path}")
+                return self.speak_and_return("PNG to PDF conversion completed successfully.")
+            else:
+                print("An error occurred during PNG to PDF conversion.")
+                return self.speak_and_return("An error occurred during PNG to PDF conversion.")
+        except Exception as e:
+            print(f"An error occurred during PNG to PDF conversion: {str(e)}")
+            return self.speak_and_return("An error occurred during PNG to PDF conversion.")
+
+
     def checkapass(self):
         from .utils.passcheck import passwords
         password = input("Enter a password to check it's strenght")
@@ -762,7 +816,7 @@ def get_intents(logical_instance):
         "open app": (["open an app", "I want to fucking open an app", "I want to open an app", "i want to open an application", "launch an app for me", "start Spotify", "open Chrome"], logical_instance.openapp),
         "close app": (["close an application", "shut down an app", "close Chrome", "shut Spotify"], logical_instance.closeapp),
         "analyze": (["analyze a paper for me", "analyze this sentence", "analise this sentence", "do text analysis", "check this text"], lambda: logical_instance.analyze_sentence(input("Enter a sentence to analyze\n"))),
-        "math": (["i need to calculate something", "can you help me with maths?", "i want to solve a math problem", "do some math"], logical_instance.math),
+        "math": (["i need to calculate something", "can you help me with maths?", "i want to solve a math problem", "do some math", "do math", "perform math operation", "i want to do math", "derivation", "add", "subtract", "multiply", "lets do some mathematics", "I want to perform some calculations",], logical_instance.math),
         "thanks": (["thanks for the", "thank you", "thanks", "i give you my thanks", "i appreciate it", "respect", "thats whats up", "I owe you one"], logical_instance.thanks),
         "quit": (["i quit", "i want to quit", "I want to leave", "exit", "im finished", "can i quit"], logical_instance.quitter),
         "joke": (["joke", "tell me another joke", "tell me a joke", "make me laugh", "I want to laugh", "are you funny", "tell me a funny joke"], logical_instance.tell_joke),
@@ -795,5 +849,6 @@ def get_intents(logical_instance):
         "image generator": (["generate an image", "image generator", "create an image", "make an image","make a picture", "image gen", "gen image", "dalle","i want to use dalle", "i want to create a picture",], logical_instance.dalle),
         "merge pdfs": (["merge pdfs", "combine pdfs", "merge pdf files"], logical_instance.merge_pdfs),
         "pass check": (["password", "check my password", "is my password good", "is my passwork weak","strong password", "hows this password", "password strength", "check password strength", "check a pass",], logical_instance.checkapass),
+        "png to pdf": (["png to pdf","convert png to a pdf"], logical_instance.png_to_pdf),
         }
     return intents
