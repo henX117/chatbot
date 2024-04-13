@@ -65,7 +65,9 @@ class logical:
             "disable tts": "disables text to speech",
             "copy": "the bot will copy the next thing that the user types",
             "calculate interest": "opens the compound interest calculator",
-            "merge pdf": "merges pdf files into one. place the files in the brain 2 directory." }
+            "merge pdf": "merges pdf files into one. place the files in the 'PLACE_PDFs_HERE' folder.",
+            "png to pdf": "turns a png into a pdf. Place the png into the 'PLACE_PDFs_HERE' folder.",
+        }
 
 
     def lottery(*args):
@@ -313,27 +315,68 @@ class logical:
     def math(self):
         from .utils.math import MathHelper
         math_helper = MathHelper()
-        user_input = input("What math operation would you like to perform? ").lower()
+        user_input = input("What math operation would you like to perform?\nType 'help' to see all math operations available\n--> ").lower()
         operation = math_helper.find_operation(user_input)
+        
+        if operation == 'help':
+            print("help selected")  # debug line
+            result = math_helper.help()
+            print("result found")  # debug line
+            print(result)
+            print("attempting to return to math main menu...")  # debug line
+            return self.math()
+
+        if operation == 'summation':
+            expression = input("Enter the expression: ")
+            lower_limit = input("Enter the lower limit: ")
+            upper_limit = input("Enter the upper limit: ")
+            variable = input("Enter the variable: ")
+            result = math_helper.summation(expression, lower_limit, upper_limit, variable)
+            return self.speak_and_return(f"The summation is: {result}")
+
+        if operation == 'limit':
+            expression = input("Enter the expression: ")
+            variable = input("Enter the variable: ")
+            approaching_value = input("Enter the approaching value: ")
+            result = math_helper.limit(expression, variable, approaching_value)
+            return self.speak_and_return(f"The limit is: {result}")
+
         if operation == 'derivative':
             expression = input("Enter the mathematical expression: ")
             result = math_helper.derivative(expression)
-            return self.speak_and_return(f"the derivative is {result}")
-        if operation:
-            num_args = 2 if operation != 'square root' else 1
+            return self.speak_and_return(f"The derivative is: {result}")
+
+        if operation == 'equation':
+            equation = input("Enter the equation: ")
+            variable = input("Enter the variable to solve for: ")
+            result = math_helper.equation(equation, variable)
+            return self.speak_and_return(f"The solution is: {result}")
+
+        if operation in ['add', 'subtract', 'multiply', 'divide', 'power']:
+            num_args = 2
             args = []
             for i in range(num_args):
                 arg = float(input(f"Enter argument {i + 1}: "))
                 args.append(arg)
 
             try:
-                result = math_helper.perform_operation(user_input, *args)
+                result = math_helper.perform_operation(operation, *args)
                 return self.speak_and_return(f"The result is: {result}")
             except Exception as L:
-                return self.speak_and_return (L)
-        else:
+                return self.speak_and_return(L)
+
+        if operation == 'square root':
+            num = float(input("Enter the number: "))
+            try:
+                result = math_helper.perform_operation(operation, num)
+                return self.speak_and_return(f"The square root is: {result}")
+            except Exception as L:
+                return self.speak_and_return(L)
+
+        if not operation:
             return self.speak_and_return("Unsupported math operation")
 
+    # ...
     def thanks(self):
         thank_responses = [
             f"You're welcome, {self.name}! Happy to help.",

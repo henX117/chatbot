@@ -2,7 +2,7 @@
 import math
 import spacy
 import sympy as sp
-
+import re
 class MathHelper:
     def __init__(self):
         self.nlp = spacy.load("en_core_web_lg")
@@ -13,29 +13,105 @@ class MathHelper:
             'divide': (["divide", "division", "quotient","division","i want to divide","lets divide"],self.divide),
             'power': (['power', 'exponent', 'raised to','squared'],self.power),
             'square root': (['square root', 'sqrt','sqr root'],self.square_root),
-            'derivative': (["derivative", "derivation", "differentiate", "find the derivative",], self.derivative)
-            # Add more math operations as needed
+            'derivative': (["derivative", "derivation", "differentiate", "find the derivative",], self.derivative),
+            'summation': (['summation','sigma',], self.summation),
+            'limit': (['limit','lim'], self.limit),
+            'help': (['i need help', 'what operations are available', 'assistance', "help me", "what can i do", "options", "what are the options","what can you do"," "],self.help),
+            'equation': (['solve equation','solve for', 'find the value'], self.equation)
         }
+    def help(self):
+        commands = {
+            'add': 'adds two numbers',
+            'subtract': 'subtract two numbers',
+            'multiply': 'multiply two numbers',
+            'divide': ' divide two numbers',
+            'power': 'take the power of a number',
+            'square root': 'take the square root of a number',
+            'derivative': 'take the derivative of an expression',
+            'summation': 'find the summation of an expression',
+            'limit': 'take the limit of an expression',
+            'solve': 'solves general equations',
+        }
+        return (commands)
+
+    def equation(self, equation, variable):
+        equation = re.sub(r'(\d)(\()', r'\1*\2', equation)
+        equation = re.sub(r'(\))(\d)', r'\1*\2', equation)
+        equation = re.sub(r'(\d)([a-zA-Z])', r'\1*\2', equation)
+        equation = re.sub(r'([a-zA-Z])(\d)', r'\1*\2', equation)
+        equation = re.sub(r'([a-zA-Z])([a-zA-Z])', r'\1*\2', equation)
+        equation = re.sub(r'=',r'-', equation)
+        try:
+            expr = sp.sympify(equation)
+            var = sp.Symbol(variable)
+            solution = sp.solveset(expr, var, domain=sp.Reals)
+
+            if isinstance(solution, sp.sets.EmptySet):
+                return "No solution found."
+            elif isinstance(solution, sp.sets.FiniteSet):
+                return f"The solution is: {', '.join(str(sol) for sol in solution)}"
+            elif isinstance(solution, sp.sets.Interval):
+                return f"The solution is in the interval: {solution}"
+            else:
+                return "Unable to determine the type of solution... Try another method?"
+        except sp.SympifyError:
+            return "Invalid equation."
+
+    def summation(self, expression, lower_limit, upper_limit, variable):
+        expression = re.sub(r'(\d)([a-zA-Z])', r'\1*\2', expression)
+        expression = re.sub(r'([a-zA-Z])(\d)', r'\1*\2', expression)
+        expression = re.sub(r'([a-zA-Z])([a-zA-Z])', r'\1*\2', expression)
+        try:
+            expr = sp.sympify(expression)
+            var = sp.Symbol(variable)
+            lower = sp.sympify(lower_limit)
+            upper = sp.sympify(upper_limit)
+            result = sp.summation(expr, (var, lower, upper))
+            return str(result)
+        except sp.SympifyError:
+            return "Invalid mathematical expression."
+    
+    def limit(self, expression, variable, approaching_value):
+        expression = re.sub(r'(\d)([a-zA-Z])', r'\1*\2', expression)
+        expression = re.sub(r'([a-zA-Z])(\d)', r'\1*\2', expression)
+        expression = re.sub(r'([a-zA-Z])([a-zA-Z])', r'\1*\2', expression)
+        try:
+            expr = sp.sympify(expression)
+            var = sp.Symbol(variable)
+            approaching = sp.sympify(approaching_value)
+            result = sp.limit(expr, var, approaching)
+            return str(result)
+        except sp.SympifyError:
+            return "Invalid mathematical expression."
 
     def derivative(self, expression):
-        expression = expression.replace('x','*x')
+        # Replace implicit multiplication with explicit multiplication
+        expression = re.sub(r'(\d)([a-zA-Z])', r'\1*\2', expression)
+        expression = re.sub(r'([a-zA-Z])(\d)', r'\1*\2', expression)
+        expression = re.sub(r'([a-zA-Z])([a-zA-Z])', r'\1*\2', expression)
+
         try:
             expr = sp.sympify(expression)
         except sp.SympifyError:
             return "Invalid mathematical expression."
+
         variables = list(expr.free_symbols)
+
         if not variables:
-            return "The expression does not contain any variables"
+            return "The expression does not contain any variables."
+
         print("Available variables:", ', '.join(str(var) for var in variables))
-        var_names = input("Enter the variable(s) to differentiate with respect to (comma-seperated): ").split(',')
+        var_names = input("Enter the variable(s) to differentiate with respect to (comma-separated): ").split(',')
         var_names = [name.strip() for name in var_names]
+
         result = expr
         for var_name in var_names:
             var = sp.Symbol(var_name)
             if var not in variables:
                 return f"Variable '{var_name}' not found in the expression."
             result = sp.diff(result, var)
-        return str(result)
+
+        return str(result)   
 
     def add(self, num1, num2):
         return num1 + num2
