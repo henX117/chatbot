@@ -2,6 +2,7 @@
 import os
 import math
 import spacy
+from spacy.tokens import Doc
 import webbrowser
 from spacy.matcher import Matcher
 import warnings
@@ -36,6 +37,8 @@ class logical:
         self.ENABLE_TTS = True
         self.reminders = []
         self.nlp = spacy.load("en_core_web_lg")
+        self.intents = get_intents(self)
+        self.intent_templates = self.preprocess_intent_templates()
         self.matcher = Matcher(self.nlp.vocab)
         pattern = [{"LOWER": "open"}, {"IS_ALPHA": True}]
         self.matcher.add("OPEN_APP", [pattern])
@@ -68,8 +71,12 @@ class logical:
             "merge pdf": "merges pdf files into one. place the files in the 'PLACE_PDFs_HERE' folder.",
             "png to pdf": "turns a png into a pdf. Place the png into the 'PLACE_PDFs_HERE' folder.",
         }
-
-
+    def preprocess_intent_templates(self):
+        intent_templates = {}
+        for intent, (templates, _) in self.intents.items():
+            intent_templates[intent] = [self.nlp(template) for template in templates]
+        return intent_templates
+    
     def lottery(*args):
         while True:
             try:
@@ -96,27 +103,30 @@ class logical:
         lastrange = int(input("Enter ending range -> "))
         number = random.randint(whatrange,lastrange)
         if self.ENABLE_TTS:
-            self.speak_and_return (number)
+            return self.speak_and_return (number)
         else:
-            print (number)
-        return ""
+            return (number)
         
-    def dalle(self): #does not work!
+    def dalle(self):
+        print("----Image Generator with Dalle-----\ntype'stop' to go back to main menu.")
         resp = str(input("Type the image that you would like to be generated\n"))
-        try:
-            client = OpenAI(OPENAI_API_KEY)
-            response = client.images.generate(
-                model="dall-e-3",
-                prompt=resp,
-                size="1024x1024",
-                quality="standard",
-                n=1,
-            )
-            print("image generated. beginning to create URL")
-            image_url = response.data[0].url
-            return image_url
-        except Exception as P:
-            return self.speak_and_return (f"Sorry, {self.name}! I had an issue trying to generate that image...\n{P}")
+        if resp == 'stop':
+            return self.main()
+        else:
+            try:
+                client = OpenAI(api_key=OPENAI_API_KEY)
+                response = client.images.generate(
+                    model="dall-e-3",
+                    prompt=resp,
+                    size="1024x1024",
+                    quality="standard",
+                    n=1,
+                )
+                print("image generated. beginning to create URL")
+                image_url = response.data[0].url
+                return image_url
+            except Exception as P:
+                return self.speak_and_return (f"Sorry, {self.name}! I had an issue trying to generate that image...\n{P}")
 
     def morningornah(self):
         current_time = datetime.now()
@@ -143,6 +153,7 @@ class logical:
             import playsound
             try:
                 speech_file_path = Path(__file__).parent / "speech.mp3"
+                backup_speech_file_path = Path(__file__).parent / "speech1.mp3"
                 response = self.client.audio.speech.create(
                     model="tts-1",
                     voice="nova",
@@ -151,7 +162,19 @@ class logical:
                 audio_content = response.content
                 with open(speech_file_path, 'wb') as audio_file:
                     audio_file.write(audio_content)
-                playsound.playsound(str(speech_file_path), True)
+                try:
+                    playsound.playsound(str(speech_file_path), True)
+                except Exception as e:
+                    print(f"An error occurred while playing speech.mp3: {e}")
+                    print("Attempting to play backup speech1.mp3...")
+                    try:
+                        with open(backup_speech_file_path, 'wb') as backup_audio_file:
+                            backup_audio_file.write(audio_content)
+                        playsound.playsound(str(backup_speech_file_path), True)
+                    except Exception as e:
+                        print(f"An error occurred while playing speech1.mp3: {e}")
+                finally:
+                    pass
             except Exception as e:
                 print(f"An error occurred: {e}")
 
@@ -166,7 +189,7 @@ class logical:
         result = dice_game.roll()
         return self.speak_and_return(f"You rolled a {result}!")
 
-    def rockpaperscissors(self, user_input=None): #does not work!
+    def rockpaperscissors(self, user_input=None):
         print("---------------------------------------------------")
         from logic.games import RockPaperScissors
         game = RockPaperScissors() #this creates instance of the game!
@@ -196,23 +219,27 @@ class logical:
 
     def openapp(self):
         self.speak("What app do you want to open?")
-        command = input("What app do you want to open: ")
-        app_name = command
-        if app_name:
-            try:
-                import AppOpener
-                print(f"Attempting to open {app_name}")
-                self.speak(f"Attempting to open {app_name}")
-                AppOpener.open(app_name)
-            except Exception as e:
-                print(f"Error trying to open {app_name}: {str(e)}")
+        print("type cancel to stop trying to open an app")
+        command = input("I want to open the app called: ")
+        if command == 'cancel':
+            return self.main()
         else:
-            print("Sorry, I couldn't identify the app that you want to open.")
-        if self.ENABLE_TTS:
-            self.speak_and_return(f"what else would you like to do, {self.name}?")
-        else:
-            print(f"What else would you like to do, {self.name}?")
-        return ""
+            app_name = command
+            if app_name:
+                try:
+                    import AppOpener
+                    print(f"Attempting to open {app_name}")
+                    self.speak(f"Attempting to open {app_name}")
+                    AppOpener.open(app_name)
+                except Exception as e:
+                    print(f"Error trying to open {app_name}: {str(e)}")
+            else:
+                print("Sorry, I couldn't identify the app that you want to open.")
+            if self.ENABLE_TTS:
+                self.speak_and_return(f"what else would you like to do, {self.name}?")
+            else:
+                print(f"What else would you like to do, {self.name}?")
+            return ""
 
     def closeapp(self):
         self.speak(f"What app do you want to close {self.name}")
@@ -225,7 +252,7 @@ class logical:
         except RuntimeError:
             return self.speak_and_return(f"{command} does not want to cooperate and close. try again??")
 
-    def analyze_sentence(self, command): #Problem! "An error occurred [Errno 13] Permission denied: 'data_visC.html'"
+    def analyze_sentence(self, command): 
         self.speak("Do you want a text summarization or a visualization analysis?")
         which_analysis = input("Which analysis do you want?\nText summary (1)\nvisualization (2)\n-->")
         if which_analysis =='1':
@@ -326,6 +353,16 @@ class logical:
             print("attempting to return to math main menu...")  # debug line
             return self.math()
 
+        if operation == 'system of equations':
+            equations = []
+            while True:
+                equation = input("Enter an equation (or press Enter to finish): ")
+                if equation == "":
+                    break
+                equations.append(equation)
+            result = math_helper.solve_system_of_equations(equations)
+            return self.speak_and_return(f"The solution to the system of equations is: {result}")
+        
         if operation == 'summation':
             expression = input("Enter the expression: ")
             lower_limit = input("Enter the lower limit: ")
@@ -425,10 +462,7 @@ class logical:
     def time(self):
         d = datetime.now()
         time_str = d.strftime("%I:%M %p")
-        if self.ENABLE_TTS:
-            return self.speak(f"It's currently {time_str}")
-        else:
-            return f"It's currently {time_str}"
+        return self.speak_and_return(f"It's currently {time_str}")
 
     def handle_greeting(self, user_input=None):
         greeting_responses = [
@@ -776,9 +810,11 @@ class logical:
             joke = response.json()
             setup = joke['setup']
             punchline = joke['punchline']
-            print(f"{setup}\n{punchline}")
-            alltogether = setup + punchline
-            return self.speak_and_return (alltogether)
+            if self.ENABLE_TTS:
+                self.speak(setup)
+                time.sleep(1)
+                self.speak(punchline)
+            return f"{setup}\n{punchline}"
         else:
             return f"{self.name}, I couldn't fetch a joke right now. Maybe this is a joke."
 
@@ -833,65 +869,78 @@ class logical:
             return f"There are multiple results for '{query}'. Did you mean one of these?\n{','.join(options)}"
         except wikipedia.exceptions.PageError:
             return f"sorry, I couldn't find a Wikipedia page for {query}"
+    
+    def huh(self):
+        responses = [
+            "I'm sorry what now?",
+            "I don't understand.",
+            "Coud you type that in a different way?",
+            "huh?",
+            "mmhm",
+            f"I didn't understand that,{self.name}.",
+            f"I did not understand that, remember that you can type 'help' to see my capabilities.",
+            "I didn't quite understand that",
+        ]
+        randomresp = random.choice(responses)
+        return self.speak_and_return (randomresp)
+    
     def find_intent(self, user_input):
-    # Process the user input
         input_doc = self.nlp(user_input)
-        scores = {}
-
-    # Compare the user input to each command template in the intents dictionary
-        for command, (templates, _) in self.intents.items():
-        # Ensure there's at least one element (the template phrase or phrases) in the tuple
-            if len(templates) > 0:
-            # If there are multiple templates, iterate through them
-                template_scores = [input_doc.similarity(self.nlp(template)) for template in templates]
-            # Use the highest score among the template phrases for this command
-                scores[command] = max(template_scores)
-
-    # Identify the command with the highest similarity score
-        intent = max(scores, key=scores.get)
-        return intent
+        max_similarity = 0
+        matched_intent = None
+        threshold = 0.75
+        for intent, templates in self.intent_templates.items():
+            for template_doc in templates:
+                similarity = input_doc.similarity(template_doc)
+                if similarity > max_similarity:
+                    max_similarity = similarity
+                    matched_intent = intent
+        if max_similarity >= threshold:
+            return matched_intent
+        else:
+            return "huh"
 
 def get_intents(logical_instance):
     intents = {
-        "cls": (["cls", "clear the screen"], logical_instance.cls),
-        "help": (["i need help", "can you assist me", "how does this work", "show me the available commands","help","capabilities","commands"], logical_instance.ineedhelp),
-        "time": (["what time is it", "tell me the time now", "could you give me the time", "time check"], logical_instance.time),
-        "open app": (["open an app", "I want to fucking open an app", "I want to open an app", "i want to open an application", "launch an app for me", "start Spotify", "open Chrome"], logical_instance.openapp),
-        "close app": (["close an application", "shut down an app", "close Chrome", "shut Spotify"], logical_instance.closeapp),
-        "analyze": (["analyze a paper for me", "analyze this sentence", "analise this sentence", "do text analysis", "check this text"], lambda: logical_instance.analyze_sentence(input("Enter a sentence to analyze\n"))),
-        "math": (["i need to calculate something", "can you help me with maths?", "i want to solve a math problem", "do some math", "do math", "perform math operation", "i want to do math", "derivation", "add", "subtract", "multiply", "lets do some mathematics", "I want to perform some calculations",], logical_instance.math),
-        "thanks": (["thanks for the", "thank you", "thanks", "i give you my thanks", "i appreciate it", "respect", "thats whats up", "I owe you one"], logical_instance.thanks),
-        "quit": (["i quit", "i want to quit", "I want to leave", "exit", "im finished", "can i quit"], logical_instance.quitter),
-        "joke": (["joke", "tell me another joke", "tell me a joke", "make me laugh", "I want to laugh", "are you funny", "tell me a funny joke"], logical_instance.tell_joke),
-        "weather": (["whats the weather like in", "tell me the weather in", "weather", "whats the weather", "show me the weather report", "weather report", "hows the weather", "whats the weather going to be like","give me the weather forecast", "whats the weather going to be like"], lambda: logical_instance.get_weather(input("Enter a location:\n"))),
-        "rock paper scissors": (["lets play RPS", "rock paper scissors", "can we play rock paper scissors"], lambda: logical_instance.rockpaperscissors()),
-        "greetings": (["hello", "hi", "good afternoon", "good morning", "whats up", "sup", "hey"], logical_instance.handle_greeting),
-        "how are you": (["how are you", "how are you doing", "how are you feeling"], logical_instance.howareyou),
-        "what is your name": (["what is your name", "whats your name", "do you have a name", "who are you"], logical_instance.myname),
-        "my name": (["say my name", "what is my name", "who am i", "whats my name", "my name", "i am who", "do you even know who i am"], logical_instance.yournameis),
-        "windows": (["windows version", "windows", "what operating system is this", "operating system details", "what version of windows am i using"], logical_instance.operatingsystem),
-        "sorry": (["im sorry", "my apologies", "oops", "oopsies", "whoops", "my bad"], logical_instance.oopsies),
-        "i feel good": (["Im good", "good", "i feel great", "i am fantastic", "im okay", "im alright", "good and you"], logical_instance.ifeelgood),
-        "i feel bad": (["im doing bad", "im not so good", "im sad", "im not happy", "im not okay", "eh", " i am sad", "i feel bad", "you make me sad"], logical_instance.ifeelbad),
-        "discuss hobbies": (["what are your hobbies", "do you have hobbys", "got any hobbies", "hobby", "hobbies", "what is your current hobby"], logical_instance.discuss_hobbies),
-        " ": ([" ", ""], logical_instance.typeSomething),
-        "xac hellven": (["who is xac", "who is xac hellven", "xac has arrived planet hellven", "whos xac", "who the fuck is xac hellven", "tell me about xac hellven"], logical_instance.xac_facts),
-        "youtube": (["open youtube", "youtube", "YT", "open YT"], logical_instance.youtube),
-        "GPT": (["open chat gpt", "GPT", "launch GPT", "open gpt"], logical_instance.gpt),
-        "enable tts": (["enable text to speech", "enable tts"], logical_instance.enable_tts),
-        "disable tts": (["disable text to speech", "disable tts", "turn off tts"], logical_instance.disable_tts),
-        "angry": (["im mad", "i am mad", "i am angry", "you are pissing me off", "i am pissed off", "i am so mad", "I am so mad right now", "angry", "im angry", "im so angry"], logical_instance.angy),
-        "copy": (["copy", "copy me", "copy what im saying", "duplicate this", "copy this", "Say this"], logical_instance.copy),
-        "time conversion": (["time conversion", "hours to minutes", "minutes to hours", "what is this in minutes", "what is this in hours"], logical_instance.timeconversion),
-        "calculate compound interest": (["calculate compound interest", "compound interest calculator", "interest"], logical_instance.calccompoundinterest),
-        "remind": (["remind me", "set a reminder", "add a reminder"], logical_instance.set_reminder),
-        "wiki": (["search wikipedia", "look up on wikipedia", "wikipedia"], logical_instance.search_wikipedia),
-        "random number": (["random number", "random num", "random number generator", "generate a random number", "random num generator"], logical_instance.randomnumgen),
-        "lottery": (["lottery","I want to play the lottery", "give me some lottery numbers", "give me lottery numbers", "lottery nums", "lottery digits"], logical_instance.lottery),
-        "dice": (["dice roll", "lets roll a dice","dice","roll a dice"], logical_instance.diceroll),
-        "image generator": (["generate an image", "image generator", "create an image", "make an image","make a picture", "image gen", "gen image", "dalle","i want to use dalle", "i want to create a picture",], logical_instance.dalle),
-        "merge pdfs": (["merge pdfs", "combine pdfs", "merge pdf files"], logical_instance.merge_pdfs),
-        "pass check": (["password", "check my password", "is my password good", "is my passwork weak","strong password", "hows this password", "password strength", "check password strength", "check a pass",], logical_instance.checkapass),
-        "png to pdf": (["png to pdf","convert png to a pdf"], logical_instance.png_to_pdf),
-        }
+        "cls": (["clear screen", "reset screen", "wipe screen", "erase screen", "empty screen","clear the screen","reset the screen","erase the screen","empty screen","cls"], logical_instance.cls),
+        "help": (["what can you do", "what are your capabilities", "help me", "I need assistance", "assist me", "guide me", "what are my options", "what commands are available","help","i need help","can you assist me","how does this work","show me the available commands","commands","capabilities"], logical_instance.ineedhelp),
+        "time": (["current time", "what's the time", "time now", "tell me the time", "what time is it currently", "what's the current time","what time is it","tell me the time now","could you give me the time","time check","check time",], logical_instance.time),
+        "open app": (["launch application", "start program", "run software", "initiate app", "begin application", "open software","open an app", "I want to open an app", "I want to open an application", "launch an app for me", ""], logical_instance.openapp),
+        "close app": (["terminate application", "kill program", "exit software", "close program", "end application", "shut down software", "close an app", "close an application for me", "shut down an app",], logical_instance.closeapp),
+        "analyze": (["perform text analysis", "analyze this text", "process this sentence", "examine this text", "interpret this sentence", "assess this text","analyze a paper for me", "analyze this sentence","do text analysis", "check this text", "analyze", "analyze a sentence"], lambda: logical_instance.analyze_sentence(input("Enter a sentence to analyze\n"))),
+        "math": (["solve math problem", "calculate", "perform calculation", "do arithmetic", "evaluate expression", "solve equation", "simplify math", "crunch numbers","i need to calculate something", "can you help me with maths", "i want to solve a math problem", "do some math", "lets do math", "lets do some math", "do math", "math", "derivation", "add", "subtract", "multiply",], logical_instance.math),
+        "thanks": (["thank you so much", "I really appreciate it", "thanks a lot", "many thanks", "I'm grateful", "you're awesome", "I owe you one", "thanks", "thank you", "i give you my thanks", "i appreciate it", "respect", "thats whats up",], logical_instance.thanks),
+        "quit": (["goodbye", "see you later", "terminate", "shut down", "exit", "close", "leave", "end session","i quit", "i want to quit", "i want to leave", "im finished", "can i quit"], logical_instance.quitter),
+        "joke": (["tell me another joke", "make me laugh again", "give me another joke", "I want to hear a funny joke", "entertain me with a joke", "crack a joke","say something funny","joke", "tell me a joke", "are you funny",], logical_instance.tell_joke),
+        "weather": (["what's the weather forecast", "how's the weather today", "give me the weather conditions", "what's the temperature outside", "will it rain today", "check the weather", "weather", "whats the weather like", "whats the weather like in", "tell me the weather in", "whats the weather", "show me the weather", "how cold is it outside", "how hot is it outside",], lambda: logical_instance.get_weather(input("Enter a location:\n"))),
+        "rock paper scissors": (["play RPS", "start a game of rock paper scissors", "let's play rock paper scissors", "begin rock paper scissors", "initiate RPS game","rock paper scissors",], lambda: logical_instance.rockpaperscissors()),
+        "greetings": (["good day", "howdy", "greetings", "nice to meet you", "pleasure to meet you", "what's up", "how's it going","hello","hi","good morning", "good afternoon", "good evening", "whats up", "sup", "hey"], logical_instance.handle_greeting),
+        "how are you": (["how's your day", "how have you been", "how's life", "how are things", "what's new with you", "how are you holding up", "how are you", "how are you doing", "how are you feeling"], logical_instance.howareyou),
+        "what is your name": (["who are you","what should I call you", "how do you call yourself", "what name do you go by", "whats your name", "tell me your name",], logical_instance.myname),
+        "my name": (["what do you call me", "do you know my name", "what am I called", "how do you address me", "who do you think I am","who am i", "what is my name", "whats my name", "my name",], logical_instance.yournameis),
+        "windows": (["what windows version is this", "windows details", "what windows am I using", "tell me about the operating system", "what OS is this", "windows version",], logical_instance.operatingsystem),
+        "sorry": (["my mistake", "I apologize", "pardon me", "forgive me", "my bad", "I didn't mean that", "im sorry", "my apologies", "oops", "oopsies", "whoops","sorry about that",], logical_instance.oopsies),
+        "i feel good": (["I'm doing well", "I'm fine", "I'm fantastic", "I'm great, thanks for asking", "I'm happy", "I'm feeling positive", "i feel good"], logical_instance.ifeelgood),
+        "i feel bad": (["I'm feeling down", "I'm not doing well", "I'm feeling sad", "I'm upset", "I'm not in a good mood", "I'm feeling negative", "im doing bad", "im not so good", "im sad", "im not happy", "im not okay", "eh", "i am sad",], logical_instance.ifeelbad),
+        "discuss hobbies": (["tell me about your hobbies", "what do you like to do", "what are your favorite activities", "how do you spend your free time", "what interests you", "what are your hobbies", "do you have hobbys", "got any hobbies", "hobby", "hobbies", "what is your current hobby"], logical_instance.discuss_hobbies),
+        "xac hellven": (["who is this xac person", "what do you know about xac hellven", "tell me more about xac", "who is this xac hellven guy", "what's the deal with xac hellven"], logical_instance.xac_facts),
+        "youtube": (["go to youtube", "launch youtube", "start youtube", "take me to youtube", "I want to watch youtube videos"], logical_instance.youtube),
+        "GPT": (["go to chat gpt", "launch chat gpt", "start chatting with gpt", "take me to gpt", "I want to chat with gpt"], logical_instance.gpt),
+        "enable tts": (["turn on text to speech", "activate tts", "start text to speech", "use text to speech", "speak the responses"], logical_instance.enable_tts),
+        "disable tts": (["turn off text to speech", "deactivate tts", "stop text to speech", "mute text to speech", "don't speak the responses"], logical_instance.disable_tts),
+        "angry": (["I'm furious", "I'm enraged", "I'm livid", "you're making me angry", "I'm irritated", "I'm annoyed", "I'm mad at you"], logical_instance.angy),
+        "copy": (["repeat after me", "say what I say", "copy my words", "mimic my speech", "echo my message", "parrot my words"], logical_instance.copy),
+        "time conversion": (["convert hours to minutes", "convert minutes to seconds", "how many minutes in an hour", "how many seconds in a minute", "time unit conversion"], logical_instance.timeconversion),
+        "calculate compound interest": (["compound interest calculation", "calculate CI", "find compound interest", "determine compound interest", "compute compound interest"], logical_instance.calccompoundinterest),
+        "remind": (["create a reminder", "remind me to", "set an alarm", "notify me", "add a reminder", "create an alert"], logical_instance.set_reminder),
+        "wiki": (["search on wikipedia", "look up in wikipedia", "find on wikipedia", "get information from wikipedia", "wikipedia search"], logical_instance.search_wikipedia),
+        "random number": (["pick a random number", "choose a random number", "give me a random number", "generate random digits", "produce random numbers"], logical_instance.randomnumgen),
+        "lottery": (["pick lottery numbers", "generate lottery numbers", "choose lottery digits", "give me lucky numbers", "suggest lottery numbers","i want to play the lottery", "lottery", "give me numbers for my lottery ticket"], logical_instance.lottery),
+        "dice": (["roll the dice", "throw the dice", "toss the dice", "roll dice", "give me a dice roll", "roll a dice"], logical_instance.diceroll),
+        "image generator": (["create a picture", "generate an illustration", "make an artwork", "produce an image", "draw an image"], logical_instance.dalle),
+        "merge pdfs": (["join pdf files", "consolidate pdfs", "unite pdfs", "blend pdfs", "fuse pdfs","merge pdfs"], logical_instance.merge_pdfs),
+        "pass check": (["verify my password", "evaluate password strength", "assess password security", "rate my password", "analyze password robustness"], logical_instance.checkapass),
+        "png to pdf": (["png to pdf","change png to pdf", "transform png to pdf", "alter png to pdf", "turn png into pdf", "switch png to pdf"], logical_instance.png_to_pdf),
+        "": ([" "], logical_instance.typeSomething)
+}
     return intents

@@ -15,9 +15,10 @@ class MathHelper:
             'square root': (['square root', 'sqrt','sqr root'],self.square_root),
             'derivative': (["derivative", "derivation", "differentiate", "find the derivative",], self.derivative),
             'summation': (['summation','sigma',], self.summation),
-            'limit': (['limit','lim'], self.limit),
+            'limit': (['limit','lim', 'find the limit'], self.limit),
             'help': (['i need help', 'what operations are available', 'assistance', "help me", "what can i do", "options", "what are the options","what can you do"," "],self.help),
-            'equation': (['solve equation','solve for', 'find the value'], self.equation)
+            'equation': (['solve equation','solve for', 'find the value'], self.equation),
+            'system of equations': (['solve system of equations', 'linear equations', 'simultaneous equations', "sys of eq"], self.solve_system_of_equations),
         }
     def help(self):
         commands = {
@@ -33,6 +34,28 @@ class MathHelper:
             'solve': 'solves general equations',
         }
         return (commands)
+
+    def solve_system_of_equations(self, equations):
+        try:
+            #print("Original equations:", equations)  # Debug
+        # Insert multiplication signs where necessary
+            equations = [re.sub(r'(\d)([a-zA-Z])', r'\1*\2', eq.replace('=', '-')) for eq in equations]
+            #print("Transformed equations with explicit multiplication:", equations)  # Debug
+            equations = [sp.sympify(eq) for eq in equations]
+            #print("Sympified equations:", equations)  # Additional debug to verify sympy expressions
+            variables = set()
+            for eq in equations:
+                variables.update(eq.free_symbols)
+            #print("Variables detected:", variables)  # Debug
+            if not variables:
+                return "No variables found."
+            solution = sp.linsolve(equations, *variables)
+            if not solution:
+                return "No solution or infinite number of solutions."
+            return str(solution)
+        except Exception as e:
+            return f"Invalid system of equations due to input error: {str(e)}"
+
 
     def equation(self, equation, variable):
         equation = re.sub(r'(\d)(\()', r'\1*\2', equation)
