@@ -28,6 +28,9 @@ webbrowser
 - playsound
 - PyPDF4 
 - pyttsx3
+- sympy
+- img2pdf
+- aiohttp
 
 You can install these libraries using pip. For example:
 1) Spacy
@@ -62,6 +65,7 @@ pip install PyPDF4
 
 10) pyttsx3
 pip install pyttsx3
+....
 
 Additionally, make sure you have the necessary language models downloaded for spacy. You can download them by running:
 python -m spacy download en_core_web_sm

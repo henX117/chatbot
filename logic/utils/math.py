@@ -8,17 +8,19 @@ class MathHelper:
         self.nlp = spacy.load("en_core_web_lg")
         self.operations = {
             'add': (["add", "sum", "plus","addition", "i want to add","lets add"],self.add),
-            'subtract': (["subtract", "minus", "difference","subtraction","i want to subtract", "lets subtract"],self.subtract),
-            'multiply': (["multiply", "product", "times","multiplication", "i want to multiply", "lets multiply"],self.multiply),
-            'divide': (["divide", "division", "quotient","division","i want to divide","lets divide"],self.divide),
+            'subtract': (["subtract", "minus", "difference","subtraction","i want to subtract", "lets subtract","sub"],self.subtract),
+            'multiply': (["multiply", "product", "times","multiplication", "i want to multiply", "lets multiply","mult"],self.multiply),
+            'divide': (["divide", "division", "quotient","division","i want to divide","lets divide", 'div',],self.divide),
             'power': (['power', 'exponent', 'raised to','squared'],self.power),
             'square root': (['square root', 'sqrt','sqr root'],self.square_root),
             'derivative': (["derivative", "derivation", "differentiate", "find the derivative",], self.derivative),
             'summation': (['summation','sigma',], self.summation),
             'limit': (['limit','lim', 'find the limit'], self.limit),
-            'help': (['i need help', 'what operations are available', 'assistance', "help me", "what can i do", "options", "what are the options","what can you do"," "],self.help),
+            'help': (['i need help', 'what operations are available', 'assistance', "help me", "what can i do", "options", "what are the options","what can you do"," ", "operations"],self.help),
             'equation': (['solve equation','solve for', 'find the value'], self.equation),
-            'system of equations': (['solve system of equations', 'linear equations', 'simultaneous equations', "sys of eq"], self.solve_system_of_equations),
+            'system of equations': (['solve system of equations', 'linear equations', 'simultaneous equations', "sys of eq","system of equations"], self.solve_system_of_equations),
+            'statistics': (['statistics', 'stats', 'statistical analysis', 'data analysis',],self.statistics),
+            'finite series sum': (['finite series sum','series summation','sum of series','sum of a series',"series sum"], self.finite_series_sum),
         }
     def help(self):
         commands = {
@@ -32,9 +34,36 @@ class MathHelper:
             'summation': 'find the summation of an expression',
             'limit': 'take the limit of an expression',
             'solve': 'solves general equations',
+            'system of equations': "solves for a variable of two or more equations",
+            'statistics': 'performs basic stats like mean,median,mode,stdev,variance',
+            'series summation': 'finds summation of a geometric or arithmetic series',
         }
         return (commands)
+    
+    def finite_series_sum(self, series_type, a, n, r=None):
+        if series_type =='arithmetic':
+            return (n/2) * (2*a+(n-1)*r)
+        elif series_type =='geometric':
+            return (a*(1-r**n))/(1-r)
+        else:
+            raise ValueError(f"only arithmetic and geometric are currently supported. {series_type}")
 
+    def statistics(self, operation, data):
+        import statistics
+        data = [float(x) for x in data.split(',')]
+        if operation == 'mean':
+            return statistics.mean(data)
+        elif operation =='median':
+            return statistics.median(data)
+        elif operation =='mode':
+            return statistics.mode(data)
+        elif operation =='stdev':
+            return statistics.stdev(data)
+        elif operation == 'variance':
+            return statistics.variance(data)
+        else:
+            raise ValueError (f"Unsupported statistical operation: {operation}")
+        
     def solve_system_of_equations(self, equations):
         try:
             #print("Original equations:", equations)  # Debug
@@ -181,6 +210,16 @@ class MathHelper:
         operation = self.find_operation(user_input)
         if operation:
             func = self.operations[operation][1]
-            return func(*args)
+            if operation == 'statistics':
+                return func(args[0], args[1])  # Pass operation and data as separate arguments
+            elif operation == 'finite series sum':
+                if len(args) == 3:
+                    return func(args[0], float(args[1]), int(args[2]))  # Arithmetic series
+                elif len(args) == 4:
+                    return func(args[0], float(args[1]), int(args[2]), float(args[3]))  # Geometric series
+                else:
+                    raise ValueError("Invalid number of arguments for finite series sum")
+            else:
+                return func(*args)
         else:
             raise ValueError(f"Unsupported math operation: {user_input}")

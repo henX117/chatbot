@@ -9,3 +9,6 @@ gtts
 playsound
 PyPDF4 
 pyttsx3
+sympy
+img2pdf
+aiohttp

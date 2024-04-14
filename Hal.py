@@ -1,5 +1,6 @@
 from logic.intents import get_intents, logical
 from logic.api_keys import OPENAI_API_KEY
+import asyncio
 
 class Chatbot(logical):
     def __init__(self, api_key, enable_tts=True):
@@ -14,17 +15,20 @@ class Chatbot(logical):
             if intent == "huh":
                 response = self.huh()
                 print(response)
+            elif intent =="analyze":
+                response = self.analyze_sentence()
+                print(response)
             else:
                 try:
                     intent_function = self.intents.get(intent, (None, None))[1]
-                    if callable(intent_function):
-                        response = intent_function()
-                        print(response)
+                    if asyncio.iscoroutinefunction(intent_function):
+                        response = asyncio.run(intent_function())
                     else:
-                        print(f"Error: The function associated with the intent {intent} is not callable or doesn't exist.")
+                        response = intent_function()
+                    print(response)
                 except Exception as e:
-                    print(f"An error occurred {e}")
-            self.check_reminders
+                    print(f"An error occurred: {str(e)}")
+            self.check_reminders()
 
 if __name__ == "__main__":
     try:

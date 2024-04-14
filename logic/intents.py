@@ -1,6 +1,4 @@
-#intents.py
 import os
-import math
 import spacy
 from spacy.tokens import Doc
 import webbrowser
@@ -24,6 +22,8 @@ from pathlib import Path
 from openai import OpenAI
 from .api_keys import OPENAI_API_KEY, WEATHER_API_KEY
 import pyttsx3
+import asyncio
+import aiohttp
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
 sys.path.insert(0, parent_dir)
@@ -46,6 +46,8 @@ class logical:
         self.reminder_thread = threading.Thread(target=self.reminder_loop)
         self.reminder_thread.daemon = True
         self.reminder_thread.start()
+        self.weather_cache = {}
+        self.weather_cache_expiration = 300
         self.commands = {
             "app": "Opens an app",
             "cls": "clears the screen",
@@ -107,26 +109,33 @@ class logical:
         else:
             return (number)
         
-    def dalle(self):
+    async def dalle(self):
         print("----Image Generator with Dalle-----\ntype'stop' to go back to main menu.")
         resp = str(input("Type the image that you would like to be generated\n"))
         if resp == 'stop':
             return self.main()
         else:
             try:
-                client = OpenAI(api_key=OPENAI_API_KEY)
-                response = client.images.generate(
-                    model="dall-e-3",
-                    prompt=resp,
-                    size="1024x1024",
-                    quality="standard",
-                    n=1,
-                )
-                print("image generated. beginning to create URL")
-                image_url = response.data[0].url
-                return image_url
-            except Exception as P:
-                return self.speak_and_return (f"Sorry, {self.name}! I had an issue trying to generate that image...\n{P}")
+                async with aiohttp.ClientSession() as session:
+                    async with session.post(
+                        "https://api.openai.com/v1/images/generations",
+                        headers={"Authorization": f"Bearer {OPENAI_API_KEY}"},
+                        json={
+                            "model": "dall-e-3",
+                            "prompt": resp,
+                            "size": "1024x1024",
+                            "quality": "standard",
+                            "n": 1,
+                        },
+                    ) as response:
+                        if response.status == 200:
+                            data = await response.json()
+                            image_url = data["output"][0]["url"]
+                            return image_url
+                        else:
+                            raise Exception(f"API request failed with status code {response.status}")
+            except Exception as e:
+                return self.speak_and_return(f"An error occurred: {e}")
 
     def morningornah(self):
         current_time = datetime.now()
@@ -239,7 +248,7 @@ class logical:
                 self.speak_and_return(f"what else would you like to do, {self.name}?")
             else:
                 print(f"What else would you like to do, {self.name}?")
-            return ""
+            return "" 
 
     def closeapp(self):
         self.speak(f"What app do you want to close {self.name}")
@@ -252,10 +261,13 @@ class logical:
         except RuntimeError:
             return self.speak_and_return(f"{command} does not want to cooperate and close. try again??")
 
-    def analyze_sentence(self, command): 
+    def analyze_sentence(self):
+        self.speak("Please enter the text that you want to analyze:")
+        command = input("Enter the text that you want to analyze:\n ")
         self.speak("Do you want a text summarization or a visualization analysis?")
-        which_analysis = input("Which analysis do you want?\nText summary (1)\nvisualization (2)\n-->")
-        if which_analysis =='1':
+        which_analysis = input("Which analysis do you want?\nText summary (1)\nVisualization (2)\n--> ")
+    
+        if which_analysis == '1':
             try:
                 from .utils.text_sum import TextSummarizer
                 num_sentences = int(input("Enter the number of sentences in the summary: "))
@@ -265,53 +277,52 @@ class logical:
             except Exception as L:
                 self.speak(f"Sorry, {self.name}. I had an issue with getting analysis on that. I'll print the error code below")
                 return L
-        elif which_analysis =='2':
+    
+        elif which_analysis == '2':
             try:
                 from spacy import displacy
                 self.speak("Do you want a large analysis or small analysis?")
-                which_nlp = input("Which analysis do you want?'small' or 'large'?\n").strip().lower()
+                which_nlp = input("Which analysis do you want? 'small' or 'large'?\n").strip().lower()
+            
                 if which_nlp == 'small':
                     nlp = spacy.load("en_core_web_sm")
-                    doc = nlp(command)
-                    sentences = list(doc.sents)
-                    html_ent1 = displacy.render(sentences, style="ent")
-                    html_dep1 = displacy.render(sentences, style="dep")
-                    self.speak("Small analysis, got it.")
-                    html_combined1 = "<html><head><title><SpaCy Analysis</title></head><body>" + html_ent1 + html_dep1 + "</body></html>"
-                    with open("data_visC.html", "w", encoding="utf-8") as f:
-                        f.write(html_combined1)
-                    try:
-                        if os.path.exists("data_visC.html") and os.access("data_visCG.html", os.R_OK):
-                            webbrowser.open("data_visC.html")
-                    except (LookupError):
-                        print("couldn't open the HTML. Try and find it in your files!")
-            # ------------------------------------------------------------------------
                 elif which_nlp == 'large':
                     nlp = spacy.load("en_core_web_lg")
-                    print("large language model loaded")
-                    doc = nlp(command)
-                    print("sentence converted into doc")
-                    sentences = list(doc.sents)
-                    print("sentence converted to list")
-                    self.speak("large analysis, got it.")
-                    html_ent = displacy.render(sentences, style="ent")
-                    html_dep = displacy.render(sentences, style='dep')
-                    html_combined = "<html><head><title><SpaCy Analysis</title></head><body>" + html_ent + html_dep + "</body></html>"
-                    print("HTML has been rendered")
-
-                    with open("data_visCG.html", "w", encoding="utf-8") as f:
-                        f.write(html_combined)
-                    try:
-                        if os.path.exists("data_visCG.html") and os.access("data_visCG.html", os.R_OK):
-                            webbrowser.open("data_visCG.html")
-                            self.speak(f"okay, I'm finished analyzing the file. I'll display the contents to your screen {self.name}")
-                    except (LookupError):
-                        print("couldn't open the HTML. Try and find it in your files!")
+                else:
+                    return self.speak_and_return("Invalid analysis option. Please choose 'small' or 'large'.")
+            
+                doc = nlp(command)
+                sentences = list(doc.sents)
+            
+            # Perform Named Entity Recognition
+                entities = [(ent.text, ent.label_) for ent in doc.ents]
+                if entities:
+                    self.speak("Named Entities found:")
+                    for entity in entities:
+                        self.speak(f"{entity[0]} - {entity[1]}")
+                else:
+                    print("")
+            
+            # Perform visualization analysis
+                html_ent = displacy.render(sentences, style="ent")
+                html_dep = displacy.render(sentences, style='dep')
+                html_combined = "<html><head><title>SpaCy Analysis</title></head><body>" + html_ent + html_dep + "</body></html>"
+            
+                output_path = "data_vis_analysis.html"
+                with open(output_path, "w", encoding="utf-8") as f:
+                    f.write(html_combined)
+            
+                self.speak(f"Visualization analysis completed. Opening {output_path} in the web browser.")
+                webbrowser.open(output_path)
+            
+                return "Visualization analysis completed."
+        
             except (ValueError, KeyError, SyntaxError):
-                self.speak_and_return("something went so wrong with that. wtf did you do?")
+                self.speak_and_return("Something went wrong with the analysis. Please try again.")
+    
         else:
-            return "Sorry, an error has occurred. restarting..." and self.main()
-
+            return self.speak_and_return("Invalid analysis option. Please choose '1' for text summary or '2' for visualization.")
+        
     def cls(self):
         os.system('cls' if os.name == 'nt' else 'clear')
         responses = [
@@ -346,12 +357,32 @@ class logical:
         operation = math_helper.find_operation(user_input)
         
         if operation == 'help':
-            print("help selected")  # debug line
             result = math_helper.help()
-            print("result found")  # debug line
             print(result)
-            print("attempting to return to math main menu...")  # debug line
             return self.math()
+
+        if operation == 'statistics':
+            stat_operation = input("Enter the statistical operation (mean, median, mode, stdev, variance)\n")
+            data = input("Enter the data points (comma-separated):\n")
+            try:
+                result = math_helper.statistics(stat_operation, data)
+                return self.speak_and_return(f"the {stat_operation} is {result}")
+            except Exception as L:
+                return self.speak_and_return(L)
+        
+        if operation == 'finite series sum':
+            series_type = input("Enter the series type (arithmetic or geometric): ")
+            a = float(input("Enter the first term: "))
+            n = int(input("Enter the number of terms: "))
+            if series_type == 'arithmetic':
+                r = float(input("Enter the common difference: "))
+                result = math_helper.finite_series_sum(series_type, a, n, r)
+            elif series_type == 'geometric':
+                r = float(input("Enter the common ration: "))
+                result = math_helper.finite_series_sum(series_type, a, n, r)
+            else:
+                return self.speak_and_return("invalid series type.")
+            return self.speak_and_return(f"The sum of the series {series_type} series is: {result}")
 
         if operation == 'system of equations':
             equations = []
@@ -432,27 +463,40 @@ class logical:
         return self.speak_and_return(response)
 
     def get_weather(self, city):
+        current_time = time.time()
+
+        if city in self.weather_cache and current_time - self.weather_cache[city]["timestamp"] < self.weather_cache_expiration:
+            # Return cached response if available and not expired
+            return self.speak_and_return(self.weather_cache[city]["response"])
+
+        # Make API call if cache is not available or expired
         api_key = WEATHER_API_KEY
         base_url = "http://api.weatherstack.com/current"
         params = {
             "access_key": api_key,
             "query": city,
-            "units": "f"  # Requesting weather data in Fahrenheit directly from the API
+            "units": "f"
         }
         response = requests.get(base_url, params=params)
 
         if response.status_code == 200:
             data = response.json()
-            # Check if the API response contains the expected data
             if 'current' in data:
                 current = data['current']
                 weather_descriptions = current.get('weather_descriptions', ['Not Available'])[0]
-                temperature = current.get('temperature', 'Not Available')  # Already in Fahrenheit
-                feelslike = current.get('feelslike', 'Not Available')  # Already in Fahrenheit
+                temperature = current.get('temperature', 'Not Available')
+                feelslike = current.get('feelslike', 'Not Available')
 
                 weather_info = (f"Weather in {city.title()}: {weather_descriptions}, "
                                 f"Temperature: {temperature} degrees, "
                                 f"Feels like: {feelslike} degrees.")
+                
+                # Cache the response
+                self.weather_cache[city] = {
+                    "timestamp": current_time,
+                    "response": f"{self.name}, here's the weather information: \n {weather_info}"
+                }
+                
                 return self.speak_and_return(f"{self.name}, here's the weather information: \n {weather_info}")
             else:
                 return "Weather data not found. Please try another location."
@@ -907,7 +951,7 @@ def get_intents(logical_instance):
         "time": (["current time", "what's the time", "time now", "tell me the time", "what time is it currently", "what's the current time","what time is it","tell me the time now","could you give me the time","time check","check time",], logical_instance.time),
         "open app": (["launch application", "start program", "run software", "initiate app", "begin application", "open software","open an app", "I want to open an app", "I want to open an application", "launch an app for me", ""], logical_instance.openapp),
         "close app": (["terminate application", "kill program", "exit software", "close program", "end application", "shut down software", "close an app", "close an application for me", "shut down an app",], logical_instance.closeapp),
-        "analyze": (["perform text analysis", "analyze this text", "process this sentence", "examine this text", "interpret this sentence", "assess this text","analyze a paper for me", "analyze this sentence","do text analysis", "check this text", "analyze", "analyze a sentence"], lambda: logical_instance.analyze_sentence(input("Enter a sentence to analyze\n"))),
+        "analyze": (["perform text analysis", "analyze this text", "process this sentence", "examine this text", "interpret this sentence", "assess this text","analyze a paper for me", "analyze this sentence","do text analysis", "check this text", "analyze", "analyze a sentence"], lambda: logical_instance.analyze_sentence),
         "math": (["solve math problem", "calculate", "perform calculation", "do arithmetic", "evaluate expression", "solve equation", "simplify math", "crunch numbers","i need to calculate something", "can you help me with maths", "i want to solve a math problem", "do some math", "lets do math", "lets do some math", "do math", "math", "derivation", "add", "subtract", "multiply",], logical_instance.math),
         "thanks": (["thank you so much", "I really appreciate it", "thanks a lot", "many thanks", "I'm grateful", "you're awesome", "I owe you one", "thanks", "thank you", "i give you my thanks", "i appreciate it", "respect", "thats whats up",], logical_instance.thanks),
         "quit": (["goodbye", "see you later", "terminate", "shut down", "exit", "close", "leave", "end session","i quit", "i want to quit", "i want to leave", "im finished", "can i quit"], logical_instance.quitter),
@@ -920,7 +964,7 @@ def get_intents(logical_instance):
         "my name": (["what do you call me", "do you know my name", "what am I called", "how do you address me", "who do you think I am","who am i", "what is my name", "whats my name", "my name",], logical_instance.yournameis),
         "windows": (["what windows version is this", "windows details", "what windows am I using", "tell me about the operating system", "what OS is this", "windows version",], logical_instance.operatingsystem),
         "sorry": (["my mistake", "I apologize", "pardon me", "forgive me", "my bad", "I didn't mean that", "im sorry", "my apologies", "oops", "oopsies", "whoops","sorry about that",], logical_instance.oopsies),
-        "i feel good": (["I'm doing well", "I'm fine", "I'm fantastic", "I'm great, thanks for asking", "I'm happy", "I'm feeling positive", "i feel good"], logical_instance.ifeelgood),
+        "i feel good": (["I'm doing well", "I'm fine", "I'm fantastic", "I'm great, thanks for asking", "I'm happy", "I'm feeling positive", "i feel good", "im doing good",], logical_instance.ifeelgood),
         "i feel bad": (["I'm feeling down", "I'm not doing well", "I'm feeling sad", "I'm upset", "I'm not in a good mood", "I'm feeling negative", "im doing bad", "im not so good", "im sad", "im not happy", "im not okay", "eh", "i am sad",], logical_instance.ifeelbad),
         "discuss hobbies": (["tell me about your hobbies", "what do you like to do", "what are your favorite activities", "how do you spend your free time", "what interests you", "what are your hobbies", "do you have hobbys", "got any hobbies", "hobby", "hobbies", "what is your current hobby"], logical_instance.discuss_hobbies),
         "xac hellven": (["who is this xac person", "what do you know about xac hellven", "tell me more about xac", "who is this xac hellven guy", "what's the deal with xac hellven"], logical_instance.xac_facts),

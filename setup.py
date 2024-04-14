@@ -131,6 +131,12 @@ try:
     else:
         print("not installed")
 
+    wantaiohttp = input("Type 1 to install aiohttp")
+    if wantaiohttp == '1':
+        install_package('aiohttp')
+    else:
+        print("not installed")
+
 except Exception as e:
     print(f"An error occurred --> {e}")
 
