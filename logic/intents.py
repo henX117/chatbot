@@ -20,21 +20,28 @@ import sys
 import subprocess
 from pathlib import Path
 from openai import OpenAI
-from .api_keys import OPENAI_API_KEY, WEATHER_API_KEY
+from .api_keys import OPENAI_API_KEY
+from .api_keys import WEATHER_API_KEY
+from .api_keys import JOKES_API_KEY
 import pyttsx3
 import asyncio
 import aiohttp
+from .utils.pomodoro import Pomodoro
+from .utils.speaking import Speaker
+from .utils.text_sum import TextSummarizer
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
 sys.path.insert(0, parent_dir)
 
 class logical:
-    def __init__(self, api_key=None):
+    def __init__(self, api_key=None, client=None, enable_tts=True):
         self.chatbot = 'Hal'
         self.fullchatbot = 'Halsey'
-        self.name = ''
-        self.client = OpenAI(api_key=api_key) if api_key else None
-        self.ENABLE_TTS = True
+        with open('user_name.txt', 'r') as f:
+            self.name = f.read().strip()
+        self.client = client
+        self.ENABLE_TTS = enable_tts
+        self.speaker = Speaker(client=self.client, enable_tts=self.ENABLE_TTS)
         self.reminders = []
         self.nlp = spacy.load("en_core_web_lg")
         self.intents = get_intents(self)
@@ -48,6 +55,7 @@ class logical:
         self.reminder_thread.start()
         self.weather_cache = {}
         self.weather_cache_expiration = 300
+        self.pomodoro_timer = Pomodoro()
         self.commands = {
             "app": "Opens an app",
             "cls": "clears the screen",
@@ -79,6 +87,14 @@ class logical:
             intent_templates[intent] = [self.nlp(template) for template in templates]
         return intent_templates
     
+    def start_pomo(self):
+        self.pomodoro_timer.start_timer()
+        return self.speak_and_return("Pomodoro timer started.")
+    
+    def stop_pomo(self):
+        self.pomodoro_timer.stop_timer()
+        return self.speak_and_return("Pomodoro timer stopped.")
+
     def lottery(*args):
         while True:
             try:
@@ -149,46 +165,8 @@ class logical:
         else:
             return ""
 
-    def speak(self, message):
-        if not self.ENABLE_TTS:
-            return ""
-        if self.client is None:
-            engine = pyttsx3.init()
-            voices = engine.getProperty('voices')
-            engine.setProperty('voice', voices[1].id)
-            engine.say(message)
-            engine.runAndWait()
-        else:
-            import playsound
-            try:
-                speech_file_path = Path(__file__).parent / "speech.mp3"
-                backup_speech_file_path = Path(__file__).parent / "speech1.mp3"
-                response = self.client.audio.speech.create(
-                    model="tts-1",
-                    voice="nova",
-                    input=message,
-                )
-                audio_content = response.content
-                with open(speech_file_path, 'wb') as audio_file:
-                    audio_file.write(audio_content)
-                try:
-                    playsound.playsound(str(speech_file_path), True)
-                except Exception as e:
-                    print(f"An error occurred while playing speech.mp3: {e}")
-                    print("Attempting to play backup speech1.mp3...")
-                    try:
-                        with open(backup_speech_file_path, 'wb') as backup_audio_file:
-                            backup_audio_file.write(audio_content)
-                        playsound.playsound(str(backup_speech_file_path), True)
-                    except Exception as e:
-                        print(f"An error occurred while playing speech1.mp3: {e}")
-                finally:
-                    pass
-            except Exception as e:
-                print(f"An error occurred: {e}")
-
     def speak_and_return(self, message):
-        self.speak(message)
+        self.speaker.speak(message)
         return message
 
     def diceroll(self):
@@ -970,8 +948,8 @@ def get_intents(logical_instance):
         "xac hellven": (["who is this xac person", "what do you know about xac hellven", "tell me more about xac", "who is this xac hellven guy", "what's the deal with xac hellven"], logical_instance.xac_facts),
         "youtube": (["go to youtube", "launch youtube", "start youtube", "take me to youtube", "I want to watch youtube videos"], logical_instance.youtube),
         "GPT": (["go to chat gpt", "launch chat gpt", "start chatting with gpt", "take me to gpt", "I want to chat with gpt"], logical_instance.gpt),
-        "enable tts": (["turn on text to speech", "activate tts", "start text to speech", "use text to speech", "speak the responses"], logical_instance.enable_tts),
-        "disable tts": (["turn off text to speech", "deactivate tts", "stop text to speech", "mute text to speech", "don't speak the responses"], logical_instance.disable_tts),
+        "enable tts": (["enable tts", "turn on text to speech", "activate tts", "start text to speech", "use text to speech", "speak the responses"], logical_instance.enable_tts),
+        "disable tts": (["disable tts", "turn off text to speech", "deactivate tts", "stop text to speech", "mute text to speech", "don't speak the responses"], logical_instance.disable_tts),
         "angry": (["I'm furious", "I'm enraged", "I'm livid", "you're making me angry", "I'm irritated", "I'm annoyed", "I'm mad at you"], logical_instance.angy),
         "copy": (["repeat after me", "say what I say", "copy my words", "mimic my speech", "echo my message", "parrot my words"], logical_instance.copy),
         "time conversion": (["convert hours to minutes", "convert minutes to seconds", "how many minutes in an hour", "how many seconds in a minute", "time unit conversion"], logical_instance.timeconversion),
@@ -985,6 +963,8 @@ def get_intents(logical_instance):
         "merge pdfs": (["join pdf files", "consolidate pdfs", "unite pdfs", "blend pdfs", "fuse pdfs","merge pdfs"], logical_instance.merge_pdfs),
         "pass check": (["verify my password", "evaluate password strength", "assess password security", "rate my password", "analyze password robustness"], logical_instance.checkapass),
         "png to pdf": (["png to pdf","change png to pdf", "transform png to pdf", "alter png to pdf", "turn png into pdf", "switch png to pdf"], logical_instance.png_to_pdf),
-        "": ([" "], logical_instance.typeSomething)
+        "": ([" "], logical_instance.typeSomething),
+        "start pomo": (["start pomo", "begin pomo", "start pomodoro", "begin pomodoro",], logical_instance.start_pomo),
+        "stop pomo": (["stop pomo", "end pomo", "stop pomodoro", "end pomodoro",], logical_instance.stop_pomo),
 }
     return intents

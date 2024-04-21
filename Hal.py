@@ -1,10 +1,12 @@
+import os
 from logic.intents import get_intents, logical
 from logic.api_keys import OPENAI_API_KEY
+from openai import OpenAI
 import asyncio
 
 class Chatbot(logical):
-    def __init__(self, api_key, enable_tts=True):
-        super().__init__(api_key)
+    def __init__(self, api_key, client=None, enable_tts=True):
+        super().__init__(api_key, client=client)
         self.ENABLE_TTS = enable_tts
 
     def main(self):
@@ -32,18 +34,13 @@ class Chatbot(logical):
 
 if __name__ == "__main__":
     try:
-        name = input("Welcome! Please state your name to continue\n-->")
+        if not os.path.exists('user_name.txt'):
+            print("Username file not found. run setup.py first.")
+            exit()
         enable_tts = True
-        if name.lower() == 'notts':
-            enable_tts = False
-            print("tts disabled")
-            name = input("name:")
-    except KeyboardInterrupt:
-        print("You done fucked up the whole thing.")
-        x = input("press any key to quit")
     except Exception as L:
         print(f"Exception Error: {L}")
     api_key = OPENAI_API_KEY
-    chatbot = Chatbot(api_key, enable_tts=enable_tts)
-    chatbot.name = name
+    client = OpenAI(api_key=api_key) if api_key else None
+    chatbot = Chatbot(api_key, client=client, enable_tts=enable_tts)
     chatbot.main()  # Call the main() method here
