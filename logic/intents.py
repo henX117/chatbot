@@ -3,6 +3,7 @@ import spacy
 from spacy.tokens import Doc
 import webbrowser
 from spacy.matcher import Matcher
+from spacy import displacy
 import warnings
 import requests
 import platform
@@ -20,10 +21,17 @@ import sys
 import subprocess
 from pathlib import Path
 from openai import OpenAI
-from .api_keys import OPENAI_API_KEY, WEATHER_API_KEY
+from .api_keys import OPENAI_API_KEY
+from .api_keys import WEATHER_API_KEY
+from .api_keys import JOKES_API_KEY
+from openai import OpenAI
+from .utils.speaking import Speaker
 import pyttsx3
 import asyncio
 import aiohttp
+from .utils.pomodoro import Pomodoro
+from .utils.speaking import Speaker
+from .utils.text_sum import TextSummarizer
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
 sys.path.insert(0, parent_dir)
@@ -32,9 +40,16 @@ class logical:
     def __init__(self, api_key=None):
         self.chatbot = 'Hal'
         self.fullchatbot = 'Halsey'
-        self.name = ''
+        with open('user_name.txt', 'r') as f:
+            self.name = f.read().strip()
         self.client = OpenAI(api_key=api_key) if api_key else None
+        print("API key:", api_key)
         self.ENABLE_TTS = True
+        print("TTS Enabled:", self.ENABLE_TTS)
+        self.speaker = Speaker(client=self.client, enable_tts=self.ENABLE_TTS)
+        print("Speaker Client Initialized:", self.speaker.client is not None)
+        print("Client Initialized:", self.client is not None)
+        self.analyze_text = None
         self.reminders = []
         self.nlp = spacy.load("en_core_web_lg")
         self.intents = get_intents(self)
@@ -48,6 +63,8 @@ class logical:
         self.reminder_thread.start()
         self.weather_cache = {}
         self.weather_cache_expiration = 300
+        self.pomodoro_timer = Pomodoro()
+        self.active_intent = None
         self.commands = {
             "app": "Opens an app",
             "cls": "clears the screen",
@@ -78,6 +95,14 @@ class logical:
         for intent, (templates, _) in self.intents.items():
             intent_templates[intent] = [self.nlp(template) for template in templates]
         return intent_templates
+    
+    def start_pomodoro(self):
+        self.pomodoro_timer.start_timer()
+        return self.speak_and_return("Pomodoro timer started")
+    
+    def stop_pomodoro(self):
+        self.pomodoro_timer.stop_timer()
+        return self.speak_and_return("Pomodoro timer stopped")
     
     def lottery(*args):
         while True:
@@ -149,46 +174,8 @@ class logical:
         else:
             return ""
 
-    def speak(self, message):
-        if not self.ENABLE_TTS:
-            return ""
-        if self.client is None:
-            engine = pyttsx3.init()
-            voices = engine.getProperty('voices')
-            engine.setProperty('voice', voices[1].id)
-            engine.say(message)
-            engine.runAndWait()
-        else:
-            import playsound
-            try:
-                speech_file_path = Path(__file__).parent / "speech.mp3"
-                backup_speech_file_path = Path(__file__).parent / "speech1.mp3"
-                response = self.client.audio.speech.create(
-                    model="tts-1",
-                    voice="nova",
-                    input=message,
-                )
-                audio_content = response.content
-                with open(speech_file_path, 'wb') as audio_file:
-                    audio_file.write(audio_content)
-                try:
-                    playsound.playsound(str(speech_file_path), True)
-                except Exception as e:
-                    print(f"An error occurred while playing speech.mp3: {e}")
-                    print("Attempting to play backup speech1.mp3...")
-                    try:
-                        with open(backup_speech_file_path, 'wb') as backup_audio_file:
-                            backup_audio_file.write(audio_content)
-                        playsound.playsound(str(backup_speech_file_path), True)
-                    except Exception as e:
-                        print(f"An error occurred while playing speech1.mp3: {e}")
-                finally:
-                    pass
-            except Exception as e:
-                print(f"An error occurred: {e}")
-
     def speak_and_return(self, message):
-        self.speak(message)
+        self.speaker.speak(message)
         return message
 
     def diceroll(self):
@@ -216,7 +203,7 @@ class logical:
             self.speak_and_return(f"Here is a list of helpful commands, {self.name}.")
         else:
             print(f"here is a list of helpful commands,{self.name}.")
-        return self.commands
+        return {'message': self.commands, 'type': 'response'}
 
     def extract_app_name(self, command):
         doc = self.nlp(command)
@@ -227,104 +214,101 @@ class logical:
         return None
 
     def openapp(self):
-        self.speak("What app do you want to open?")
-        print("type cancel to stop trying to open an app")
-        command = input("I want to open the app called: ")
-        if command == 'cancel':
-            return self.main()
-        else:
-            app_name = command
-            if app_name:
-                try:
-                    import AppOpener
-                    print(f"Attempting to open {app_name}")
-                    self.speak(f"Attempting to open {app_name}")
-                    AppOpener.open(app_name)
-                except Exception as e:
-                    print(f"Error trying to open {app_name}: {str(e)}")
-            else:
-                print("Sorry, I couldn't identify the app that you want to open.")
-            if self.ENABLE_TTS:
-                self.speak_and_return(f"what else would you like to do, {self.name}?")
-            else:
-                print(f"What else would you like to do, {self.name}?")
-            return "" 
+        return {'message': "What app do you want to open? (Type 'cancel' to stop)", 'type': 'input_request'}
 
     def closeapp(self):
-        self.speak(f"What app do you want to close {self.name}")
-        command = input(f"What app do you want to close, {self.name}?")
-        try:
-            from AppOpener import close
-            print(f"attempting to close{command}")
-            close(command)
-            return""
-        except RuntimeError:
-            return self.speak_and_return(f"{command} does not want to cooperate and close. try again??")
+        return {'message': "What app do you want to close?", 'type': 'input_request'}
 
-    def analyze_sentence(self):
-        self.speak("Please enter the text that you want to analyze:")
-        command = input("Enter the text that you want to analyze:\n ")
-        self.speak("Do you want a text summarization or a visualization analysis?")
-        which_analysis = input("Which analysis do you want?\nText summary (1)\nVisualization (2)\n--> ")
-    
-        if which_analysis == '1':
+    def handle_analyze(self, user_input):
+        if user_input == '1':
             try:
                 from .utils.text_sum import TextSummarizer
-                num_sentences = int(input("Enter the number of sentences in the summary: "))
-                summarizer = TextSummarizer()
-                summary = summarizer.summarize(command, num_sentences)
-                return self.speak_and_return(f"Here's the summary:\n{summary}")
+                self.active_intent = "analyze_summary"
+                return {'message': "Enter the number of sentences in the summary:", 'type': 'input_request'}
             except Exception as L:
-                self.speak(f"Sorry, {self.name}. I had an issue with getting analysis on that. I'll print the error code below")
-                return L
-    
-        elif which_analysis == '2':
+                self.speaker.speak(f"Sorry, {self.name}. I had an issue with getting analysis on that. I'll print the error code below")
+                self.active_intent = None
+                return {'message': str(L), 'type': 'response'}
+        elif user_input == '2':
             try:
                 from spacy import displacy
-                self.speak("Do you want a large analysis or small analysis?")
-                which_nlp = input("Which analysis do you want? 'small' or 'large'?\n").strip().lower()
-            
-                if which_nlp == 'small':
-                    nlp = spacy.load("en_core_web_sm")
-                elif which_nlp == 'large':
-                    nlp = spacy.load("en_core_web_lg")
-                else:
-                    return self.speak_and_return("Invalid analysis option. Please choose 'small' or 'large'.")
-            
-                doc = nlp(command)
-                sentences = list(doc.sents)
-            
-            # Perform Named Entity Recognition
-                entities = [(ent.text, ent.label_) for ent in doc.ents]
-                if entities:
-                    self.speak("Named Entities found:")
-                    for entity in entities:
-                        self.speak(f"{entity[0]} - {entity[1]}")
-                else:
-                    print("")
-            
-            # Perform visualization analysis
-                html_ent = displacy.render(sentences, style="ent")
-                html_dep = displacy.render(sentences, style='dep')
-                html_combined = "<html><head><title>SpaCy Analysis</title></head><body>" + html_ent + html_dep + "</body></html>"
-            
-                output_path = "data_vis_analysis.html"
-                with open(output_path, "w", encoding="utf-8") as f:
-                    f.write(html_combined)
-            
-                self.speak(f"Visualization analysis completed. Opening {output_path} in the web browser.")
-                webbrowser.open(output_path)
-            
-                return "Visualization analysis completed."
-        
-            except (ValueError, KeyError, SyntaxError):
-                self.speak_and_return("Something went wrong with the analysis. Please try again.")
-    
+                self.speaker.speak("Do you want a large analysis or small analysis?")
+                self.active_intent = "analyze_visualization"
+                return {'message': "Which analysis do you want? 'small' or 'large'?", 'type': 'input_request'}
+            except (ValueError, KeyError, SyntaxError) as e:
+                self.active_intent = None
+                return {'message': f"Something went wrong with the analysis: {e}", 'type': 'response'}
         else:
-            return self.speak_and_return("Invalid analysis option. Please choose '1' for text summary or '2' for visualization.")
-        
+            self.analyze_text = user_input
+            return {'message': "Do you want a text summarization or a visualization analysis?\nText summary (1)\nVisualization (2)", 'type': 'input_request'}
+
+    def handle_open_app(self, user_input):
+        app_name = user_input
+        if app_name.lower() == 'cancel':
+            self.active_intent = None
+            return {'message': "App opening canceled. What else would you like to do?", 'type': 'response'}
+        else:
+            try:
+                import AppOpener
+                print(f"Attempting to open {app_name}")
+                self.speaker.speak(f"Attempting to open {app_name}")
+                AppOpener.open(app_name)
+                self.active_intent = None
+                return {'message': f"Opened {app_name}. What else would you like to do?", 'type': 'response'}
+            except Exception as e:
+                self.active_intent = None
+                return {'message': f"Error trying to open {app_name}: {str(e)}", 'type': 'response'}
+
+    def handle_close_app(self, user_input):
+        app_name = user_input
+        try:
+            from AppOpener import close
+            print(f"Attempting to close {app_name}")
+            close(app_name)
+            self.active_intent = None
+            return {'message': f"Closed {app_name}. What else would you like to do?", 'type': 'response'}
+        except RuntimeError:
+            self.active_intent = None
+            return {'message': "Error trying to close the app. Please try again.", 'type': 'response'}
+
+    def process_user_input(self, user_input):
+        print(f"Active intent: {self.active_intent}, User input: {user_input}")  # debug line
+        if self.active_intent == "analyze":
+            if user_input == '1':
+                print("User selected option 1")  # debug line
+                self.active_intent = "analyze_summary"
+                return {'message': "Enter the number of sentences in the summary:", 'type': 'input_request'}
+            elif user_input == '2':
+                print("User selected option 2")  # debug line
+                self.active_intent = "analyze_visualization"
+                return {'message': "Which analysis do you want? 'small' or 'large'?", 'type': 'input_request'}
+            else:
+                print("User input does not match options 1 or 2")  # debug line
+                self.analyze_text = user_input
+                print(f"analyze_text set to: {self.analyze_text}")  # debug line
+                return {'message': "Do you want a text summarization (1) or a visualization analysis (2)?", 'type': 'input_request'}
+        elif self.active_intent == "analyze_summary":
+            try:
+                num_sentences = int(user_input)
+                summarizer = TextSummarizer()
+                summary = summarizer.summarize(self.analyze_text, num_sentences)
+                self.active_intent = None
+                return {'message': f"Here's the summary:\n{summary}", 'type': 'response'}
+            except ValueError:
+                return {'message': "Invalid input. Please enter a valid number of sentences.", 'type': 'input_request'}
+        elif self.active_intent == "analyze_visualization":
+            return self.handle_analyze_visualization(user_input)
+        elif self.active_intent == "open app":
+            return self.handle_open_app(user_input)
+        elif self.active_intent == "close app":
+            return self.handle_close_app(user_input)
+        elif self.active_intent == "math":
+            return self.handle_math_input(user_input)
+        else:
+            return self.find_intent(user_input)
+
     def cls(self):
-        os.system('cls' if os.name == 'nt' else 'clear')
+        self.chat_history.clear()
         responses = [
             f"system cleared. Enjoy the view!",
             f"system cleared.",
@@ -341,7 +325,7 @@ class logical:
             f"error, task failed successfully.",
         ]
         response = random.choice(responses)
-        return self.speak_and_return(response)
+        return {'message': self.speak_and_return(response), 'type': 'response'}
 
     def quitter(self):
         command = input(f"Are you sure you want to quit, {self.name}? any progress will NOT be saved \n type 'quit' to quit. type anything else to stay.")
@@ -349,102 +333,218 @@ class logical:
             quit()
         else:
             return self.speak_and_return(f'alrighty. What do you want to do now, {self.name}?')
-
+    
+    def handle_analyze_summary(self, user_input):
+        try:
+            num_sentences = int(user_input)
+            summarizer = TextSummarizer()
+            summary = summarizer.summarize(self.analyze_text, num_sentences)
+            self.active_intent = None
+            return {'message': f"Here's the summary:\n{summary}", 'type': 'response'}
+        except ValueError:
+            return {'message': "Invalid input. Please enter a valid number of sentences.", 'type': 'input_request'}
+    
     def math(self):
         from .utils.math import MathHelper
         math_helper = MathHelper()
-        user_input = input("What math operation would you like to perform?\nType 'help' to see all math operations available\n--> ").lower()
-        operation = math_helper.find_operation(user_input)
-        
+        self.active_intent = "math"
+        return {'message': "What math operation would you like to perform?\nType 'help' to see all math operations available", 'type': 'input_request'}
+
+    def handle_math_input(self, user_input):
+        from .utils.math import MathHelper
+        math_helper = MathHelper()
+        operation = self.active_intent
+
+        if operation == 'math':
+            operation = math_helper.find_operation(user_input)
+            if operation is None:
+                self.active_intent = None
+                return {'message': "Unsupported operation. Please try again.", 'type': 'response'}
+
         if operation == 'help':
+            print("math operation is help")  # debug line
+            self.active_intent = None
             result = math_helper.help()
-            print(result)
-            return self.math()
+            return {'message': str(result), 'type': 'response'}
 
-        if operation == 'statistics':
-            stat_operation = input("Enter the statistical operation (mean, median, mode, stdev, variance)\n")
-            data = input("Enter the data points (comma-separated):\n")
+        if operation in ['add', 'subtract', 'multiply', 'divide', 'power', 'square root']:
+            print("math operation is add, subtract, multiply, divide, power, square root")  # debug line
+            self.active_intent = f"{operation}_num1"
+            return {'message': f"Enter the first number for {operation}:", 'type': 'input_request'}
+
+        elif operation.endswith("_num1"):
             try:
-                result = math_helper.statistics(stat_operation, data)
-                return self.speak_and_return(f"the {stat_operation} is {result}")
-            except Exception as L:
-                return self.speak_and_return(L)
-        
-        if operation == 'finite series sum':
-            series_type = input("Enter the series type (arithmetic or geometric): ")
-            a = float(input("Enter the first term: "))
-            n = int(input("Enter the number of terms: "))
-            if series_type == 'arithmetic':
-                r = float(input("Enter the common difference: "))
-                result = math_helper.finite_series_sum(series_type, a, n, r)
-            elif series_type == 'geometric':
-                r = float(input("Enter the common ration: "))
-                result = math_helper.finite_series_sum(series_type, a, n, r)
-            else:
-                return self.speak_and_return("invalid series type.")
-            return self.speak_and_return(f"The sum of the series {series_type} series is: {result}")
+                self.num1 = float(user_input)  # Store num1 as an instance variable
+                self.active_intent = f"{operation}_num2"
+                return {'message': f"Enter the second number for {operation[:-5]}:", 'type': 'input_request'}
+            except ValueError:
+                self.active_intent = None
+                return {'message': "Invalid input. Please enter a valid number.", 'type': 'response'}
 
-        if operation == 'system of equations':
-            equations = []
-            while True:
-                equation = input("Enter an equation (or press Enter to finish): ")
-                if equation == "":
-                    break
+        elif operation.endswith("_num2"):
+            try:
+                num2 = float(user_input)
+                result = math_helper.perform_operation(operation[:-5], self.num1, num2)  # Use self.num1
+                self.active_intent = None
+                return {'message': f"The result of {operation[:-5]} {self.num1} and {num2} is: {result}", 'type': 'response'}
+            except ValueError:
+                self.active_intent = None
+                return {'message': "Invalid input. Please enter a valid number.", 'type': 'response'}
+            
+        elif operation == 'derivative':
+            try:
+                result = math_helper.derivative(user_input)
+                self.active_intent = None
+                return {'message': f"The derivative is: {result}", 'type': 'response'}
+            except Exception as e:
+                self.active_intent = None
+                return {'message': str(e), 'type': 'response'}
+
+        elif operation == 'summation':
+            self.active_intent = 'summation_lower_limit'
+            return {'message': "Enter the lower limit:", 'type': 'input_request'}
+
+        elif operation == 'summation_lower_limit':
+            lower_limit = user_input
+            self.active_intent = 'summation_upper_limit'
+            return {'message': "Enter the upper limit:", 'type': 'input_request'}
+
+        elif operation == 'summation_upper_limit':
+            upper_limit = user_input
+            self.active_intent = 'summation_variable'
+            return {'message': "Enter the variable:", 'type': 'input_request'}
+
+        elif operation == 'summation_variable':
+            variable = user_input
+            try:
+                result = math_helper.summation(self.analyze_text, lower_limit, upper_limit, variable)
+                self.active_intent = None
+                return {'message': f"The summation is: {result}", 'type': 'response'}
+            except Exception as e:
+                self.active_intent = None
+                return {'message': str(e), 'type': 'response'}
+
+        elif operation == 'limit':
+            self.active_intent = 'limit_variable'
+            return {'message': "Enter the variable:", 'type': 'input_request'}
+
+        elif operation == 'limit_variable':
+            variable = user_input
+            self.active_intent = 'limit_approaching_value'
+            return {'message': "Enter the approaching value:", 'type': 'input_request'}
+
+        elif operation == 'limit_approaching_value':
+            approaching_value = user_input
+            try:
+                result = math_helper.limit(self.analyze_text, variable, approaching_value)
+                self.active_intent = None
+                return {'message': f"The limit is: {result}", 'type': 'response'}
+            except Exception as e:
+                self.active_intent = None
+                return {'message': str(e), 'type': 'response'}
+
+        elif operation == 'equation':
+            self.active_intent = 'equation_variable'
+            return {'message': "Enter the variable to solve for:", 'type': 'input_request'}
+
+        elif operation == 'equation_variable':
+            variable = user_input
+            try:
+                result = math_helper.equation(self.analyze_text, variable)
+                self.active_intent = None
+                return {'message': f"The solution is: {result}", 'type': 'response'}
+            except Exception as e:
+                self.active_intent = None
+                return {'message': str(e), 'type': 'response'}
+
+        elif operation == 'system of equations':
+            equations = [self.analyze_text]
+            self.active_intent = 'system_of_equations_input'
+            return {'message': "Enter another equation (or press Enter to finish):", 'type': 'input_request'}
+
+        elif operation == 'system_of_equations_input':
+            equation = user_input.strip()
+            if equation:
                 equations.append(equation)
-            result = math_helper.solve_system_of_equations(equations)
-            return self.speak_and_return(f"The solution to the system of equations is: {result}")
-        
-        if operation == 'summation':
-            expression = input("Enter the expression: ")
-            lower_limit = input("Enter the lower limit: ")
-            upper_limit = input("Enter the upper limit: ")
-            variable = input("Enter the variable: ")
-            result = math_helper.summation(expression, lower_limit, upper_limit, variable)
-            return self.speak_and_return(f"The summation is: {result}")
+                return {'message': "Enter another equation (or press Enter to finish):", 'type': 'input_request'}
+            else:
+                try:
+                    result = math_helper.solve_system_of_equations(equations)
+                    self.active_intent = None
+                    return {'message': f"The solution to the system of equations is: {result}", 'type': 'response'}
+                except Exception as e:
+                    self.active_intent = None
+                    return {'message': str(e), 'type': 'response'}
 
-        if operation == 'limit':
-            expression = input("Enter the expression: ")
-            variable = input("Enter the variable: ")
-            approaching_value = input("Enter the approaching value: ")
-            result = math_helper.limit(expression, variable, approaching_value)
-            return self.speak_and_return(f"The limit is: {result}")
+        elif operation == 'statistics':
+            self.active_intent = 'statistics_data'
+            return {'message': "Enter the data points (comma-separated):", 'type': 'input_request'}
 
-        if operation == 'derivative':
-            expression = input("Enter the mathematical expression: ")
-            result = math_helper.derivative(expression)
-            return self.speak_and_return(f"The derivative is: {result}")
-
-        if operation == 'equation':
-            equation = input("Enter the equation: ")
-            variable = input("Enter the variable to solve for: ")
-            result = math_helper.equation(equation, variable)
-            return self.speak_and_return(f"The solution is: {result}")
-
-        if operation in ['add', 'subtract', 'multiply', 'divide', 'power']:
-            num_args = 2
-            args = []
-            for i in range(num_args):
-                arg = float(input(f"Enter argument {i + 1}: "))
-                args.append(arg)
-
+        elif operation == 'statistics_data':
+            data = user_input
             try:
-                result = math_helper.perform_operation(operation, *args)
-                return self.speak_and_return(f"The result is: {result}")
-            except Exception as L:
-                return self.speak_and_return(L)
+                result = math_helper.statistics(self.analyze_text, data)
+                self.active_intent = None
+                return {'message': f"The {self.analyze_text} of the data is: {result}", 'type': 'response'}
+            except Exception as e:
+                self.active_intent = None
+                return {'message': str(e), 'type': 'response'}
 
-        if operation == 'square root':
-            num = float(input("Enter the number: "))
+        elif operation == 'finite series sum':
+            if user_input.lower() == 'arithmetic':
+                self.active_intent = 'finite_series_sum_arithmetic_a'
+                return {'message': "Enter the first term:", 'type': 'input_request'}
+            elif user_input.lower() == 'geometric':
+                self.active_intent = 'finite_series_sum_geometric_a'
+                return {'message': "Enter the first term:", 'type': 'input_request'}
+            else:
+                self.active_intent = None
+                return {'message': "Invalid series type. Please enter 'arithmetic' or 'geometric'.", 'type': 'response'}
+
+        elif operation == 'finite_series_sum_arithmetic_a':
+            a = float(user_input)
+            self.active_intent = 'finite_series_sum_arithmetic_n'
+            return {'message': "Enter the number of terms:", 'type': 'input_request'}
+
+        elif operation == 'finite_series_sum_arithmetic_n':
+            n = int(user_input)
+            self.active_intent = 'finite_series_sum_arithmetic_r'
+            return {'message': "Enter the common difference:", 'type': 'input_request'}
+
+        elif operation == 'finite_series_sum_arithmetic_r':
+            r = float(user_input)
             try:
-                result = math_helper.perform_operation(operation, num)
-                return self.speak_and_return(f"The square root is: {result}")
-            except Exception as L:
-                return self.speak_and_return(L)
+                result = math_helper.finite_series_sum('arithmetic', a, n, r)
+                self.active_intent = None
+                return {'message': f"The sum of the arithmetic series is: {result}", 'type': 'response'}
+            except Exception as e:
+                self.active_intent = None
+                return {'message': str(e), 'type': 'response'}
 
-        if not operation:
-            return self.speak_and_return("Unsupported math operation")
+        elif operation == 'finite_series_sum_geometric_a':
+            a = float(user_input)
+            self.active_intent = 'finite_series_sum_geometric_n'
+            return {'message': "Enter the number of terms:", 'type': 'input_request'}
 
-    # ...
+        elif operation == 'finite_series_sum_geometric_n':
+            n = int(user_input)
+            self.active_intent = 'finite_series_sum_geometric_r'
+            return {'message': "Enter the common ratio:", 'type': 'input_request'}
+
+        elif operation == 'finite_series_sum_geometric_r':
+            r = float(user_input)
+            try:
+                result = math_helper.finite_series_sum('geometric', a, n, r)
+                self.active_intent = None
+                return {'message': f"The sum of the geometric series is: {result}", 'type': 'response'}
+            except Exception as e:
+                self.active_intent = None
+                return {'message': str(e), 'type': 'response'}
+
+        else:
+            self.active_intent = None
+            return {'message': "Unsupported operation. Please try again.", 'type': 'response'}
+
     def thanks(self):
         thank_responses = [
             f"You're welcome, {self.name}! Happy to help.",
@@ -462,14 +562,17 @@ class logical:
         response = random.choice(thank_responses)
         return self.speak_and_return(response)
 
-    def get_weather(self, city):
+    def get_weather(self, city=None):
+        if not city:
+            return {'message': "Enter a location:", 'type': 'input_request'}
+
         current_time = time.time()
 
         if city in self.weather_cache and current_time - self.weather_cache[city]["timestamp"] < self.weather_cache_expiration:
-            # Return cached response if available and not expired
-            return self.speak_and_return(self.weather_cache[city]["response"])
+        # Return cached response if available and not expired
+            return {'message': self.weather_cache[city]["response"], 'type': 'response'}
 
-        # Make API call if cache is not available or expired
+    # Make API call if cache is not available or expired
         api_key = WEATHER_API_KEY
         base_url = "http://api.weatherstack.com/current"
         params = {
@@ -490,18 +593,18 @@ class logical:
                 weather_info = (f"Weather in {city.title()}: {weather_descriptions}, "
                                 f"Temperature: {temperature} degrees, "
                                 f"Feels like: {feelslike} degrees.")
-                
-                # Cache the response
+            
+            # Cache the response
                 self.weather_cache[city] = {
                     "timestamp": current_time,
                     "response": f"{self.name}, here's the weather information: \n {weather_info}"
                 }
-                
-                return self.speak_and_return(f"{self.name}, here's the weather information: \n {weather_info}")
+            
+                return {'message': f"{self.name}, here's the weather information: \n {weather_info}", 'type': 'response'}
             else:
-                return "Weather data not found. Please try another location."
+                return {'message': "Weather data not found. Please try another location.", 'type': 'response'}
         else:
-            return "Failed to retrieve weather data. Please try again later."
+            return {'message': "Failed to retrieve weather data. Please try again later.", 'type': 'response'}
 
     def time(self):
         d = datetime.now()
@@ -776,6 +879,41 @@ class logical:
             else:
                 print("-----------------------------")
 
+    def handle_analyze_visualization(self, user_input):
+        if user_input.lower() == 'small':
+            nlp = spacy.load("en_core_web_sm")
+        elif user_input.lower() == 'large':
+            nlp = spacy.load("en_core_web_lg")
+        else:
+            return {'message': "Invalid analysis option. Please choose 'small' or 'large'.", 'type': 'input_request'}
+
+        doc = nlp(self.analyze_text)
+        sentences = list(doc.sents)
+
+        # Perform Named Entity Recognition
+        entities = [(ent.text, ent.label_) for ent in doc.ents]
+        if entities:
+            self.speaker.speak("Named Entities found:")
+            for entity in entities:
+                self.speaker.speak(f"{entity[0]} - {entity[1]}")
+        else:
+            self.speaker.speak("No named entities found.")
+
+        # Perform visualization analysis
+        html_ent = displacy.render(sentences, style="ent")
+        html_dep = displacy.render(sentences, style='dep')
+        html_combined = "<html><head><title>SpaCy Analysis</title></head><body>" + html_ent + html_dep + "</body></html>"
+
+        output_path = "data_vis_analysis.html"
+        with open(output_path, "w", encoding="utf-8") as f:
+            f.write(html_combined)
+
+        self.speaker.speak(f"Visualization analysis completed. Opening {output_path} in the web browser.")
+        webbrowser.open(output_path)
+
+        self.active_intent = None
+        return {'message': "Visualization analysis completed.", 'type': 'response'}    
+
     def png_to_pdf(self):
         from .pdfs.pdfconverter import PNGToPDFConverter
         png_directory = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "PLACE_PDFs_HERE")
@@ -855,9 +993,9 @@ class logical:
             setup = joke['setup']
             punchline = joke['punchline']
             if self.ENABLE_TTS:
-                self.speak(setup)
+                self.speaker.speak(setup)
                 time.sleep(1)
-                self.speak(punchline)
+                self.speaker.speak(punchline)
             return f"{setup}\n{punchline}"
         else:
             return f"{self.name}, I couldn't fetch a joke right now. Maybe this is a joke."
@@ -914,6 +1052,13 @@ class logical:
         except wikipedia.exceptions.PageError:
             return f"sorry, I couldn't find a Wikipedia page for {query}"
     
+    def change_name(self):
+        new_name = input("What's your name?: ")
+        with open('user_name.txt', 'w') as f:
+            f.write(new_name)
+        self.name = new_name
+        return self.speak_and_return(f"Alright, I'll call you {new_name} from now on.")
+
     def huh(self):
         responses = [
             "I'm sorry what now?",
@@ -927,22 +1072,77 @@ class logical:
         ]
         randomresp = random.choice(responses)
         return self.speak_and_return (randomresp)
-    
+
     def find_intent(self, user_input):
+        if self.active_intent:
+            if self.active_intent.startswith("analyze"):
+                if self.active_intent == "analyze_summary":
+                    return self.handle_analyze_summary(user_input)
+                elif self.active_intent == "analyze_visualization":
+                    return self.handle_analyze_visualization(user_input)
+            elif self.active_intent.startswith(("add", "subtract", "multiply", "divide", "power", "square root")):
+                return self.handle_math_input(user_input)
+            else:
+                return self.process_user_input(user_input)
+
         input_doc = self.nlp(user_input)
         max_similarity = 0
         matched_intent = None
-        threshold = 0.75
-        for intent, templates in self.intent_templates.items():
-            for template_doc in templates:
+        threshold = 0.7
+        for intent, (templates, _) in self.intents.items():
+            for template in templates:
+                template_doc = self.nlp(template)
                 similarity = input_doc.similarity(template_doc)
                 if similarity > max_similarity:
                     max_similarity = similarity
                     matched_intent = intent
         if max_similarity >= threshold:
-            return matched_intent
+            print(f"Matched intent: {matched_intent}")  # debug line
+            if matched_intent == "huh":
+                return {'message': self.huh(), 'type': 'response'}
+            elif matched_intent == "analyze":
+                self.active_intent = "analyze"
+                return {'message': "Please enter the text that you want to analyze:", 'type': 'input_request'}
+            elif matched_intent == "open app":
+                self.active_intent = "open app"
+                return {'message': self.openapp()['message'], 'type': 'input_request'}
+            elif matched_intent == "close app":
+                self.active_intent = "close app"
+                return {'message': self.closeapp()['message'], 'type': 'input_request'}
+            elif matched_intent == "weather":
+                self.active_intent = "weather"
+                return {'message': "Enter a location:", 'type': 'input_request'}
+            elif matched_intent == "remind":
+                self.active_intent = "remind"
+                return {'message': "What should I remind you about?", 'type': 'input_request'}
+            elif matched_intent == "wiki":
+                self.active_intent = "wiki"
+                return {'message': "What would you like to search for on Wikipedia?", 'type': 'input_request'}
+            elif matched_intent == "random number":
+                return {'message': self.randomnumgen(), 'type': 'response'}
+            elif matched_intent == "lottery":
+                return {'message': self.lottery(), 'type': 'response'}
+            elif matched_intent == "dice":
+                return {'message': self.diceroll(), 'type': 'response'}
+            elif matched_intent == "image generator":
+                self.active_intent = "image generator"
+                return {'message': "Type the image that you would like to be generated (or type 'stop' to go back to the main menu):", 'type': 'input_request'}
+            elif matched_intent == "math":
+                self.active_intent = "math"
+                return {'message': "What math operation would you like to perform?\nType 'help' to see the available math operations.", 'type': 'input_request'}
+            else:
+                intent_function = self.intents.get(matched_intent, (None, None))[1]
+                if callable(intent_function):
+                    response = intent_function()
+                    print(f"Intent function response: {response}")  # debugging line
+                    if isinstance(response, dict):
+                        return response
+                    else:
+                        return {'message': response, 'type': 'response'}
+                else:
+                    return {'message': self.huh(), 'type': 'response'}
         else:
-            return "huh"
+            return {'message': self.huh(), 'type': 'response'}
 
 def get_intents(logical_instance):
     intents = {
@@ -950,8 +1150,10 @@ def get_intents(logical_instance):
         "help": (["what can you do", "what are your capabilities", "help me", "I need assistance", "assist me", "guide me", "what are my options", "what commands are available","help","i need help","can you assist me","how does this work","show me the available commands","commands","capabilities"], logical_instance.ineedhelp),
         "time": (["current time", "what's the time", "time now", "tell me the time", "what time is it currently", "what's the current time","what time is it","tell me the time now","could you give me the time","time check","check time",], logical_instance.time),
         "open app": (["launch application", "start program", "run software", "initiate app", "begin application", "open software","open an app", "I want to open an app", "I want to open an application", "launch an app for me", ""], logical_instance.openapp),
-        "close app": (["terminate application", "kill program", "exit software", "close program", "end application", "shut down software", "close an app", "close an application for me", "shut down an app",], logical_instance.closeapp),
+        "close app": (["close an app","terminate application", "kill program", "exit software", "close program", "end application", "shut down software", "close an app", "close an application for me", "shut down an app",], logical_instance.closeapp),
         "analyze": (["perform text analysis", "analyze this text", "process this sentence", "examine this text", "interpret this sentence", "assess this text","analyze a paper for me", "analyze this sentence","do text analysis", "check this text", "analyze", "analyze a sentence"], lambda: logical_instance.analyze_sentence),
+        "analyze_summary": (["1"], logical_instance.handle_analyze_summary),
+        "analyze_visualization": (["2"], logical_instance.handle_analyze_visualization),
         "math": (["solve math problem", "calculate", "perform calculation", "do arithmetic", "evaluate expression", "solve equation", "simplify math", "crunch numbers","i need to calculate something", "can you help me with maths", "i want to solve a math problem", "do some math", "lets do math", "lets do some math", "do math", "math", "derivation", "add", "subtract", "multiply",], logical_instance.math),
         "thanks": (["thank you so much", "I really appreciate it", "thanks a lot", "many thanks", "I'm grateful", "you're awesome", "I owe you one", "thanks", "thank you", "i give you my thanks", "i appreciate it", "respect", "thats whats up",], logical_instance.thanks),
         "quit": (["goodbye", "see you later", "terminate", "shut down", "exit", "close", "leave", "end session","i quit", "i want to quit", "i want to leave", "im finished", "can i quit"], logical_instance.quitter),
@@ -965,7 +1167,7 @@ def get_intents(logical_instance):
         "windows": (["what windows version is this", "windows details", "what windows am I using", "tell me about the operating system", "what OS is this", "windows version",], logical_instance.operatingsystem),
         "sorry": (["my mistake", "I apologize", "pardon me", "forgive me", "my bad", "I didn't mean that", "im sorry", "my apologies", "oops", "oopsies", "whoops","sorry about that",], logical_instance.oopsies),
         "i feel good": (["I'm doing well", "I'm fine", "I'm fantastic", "I'm great, thanks for asking", "I'm happy", "I'm feeling positive", "i feel good", "im doing good",], logical_instance.ifeelgood),
-        "i feel bad": (["I'm feeling down", "I'm not doing well", "I'm feeling sad", "I'm upset", "I'm not in a good mood", "I'm feeling negative", "im doing bad", "im not so good", "im sad", "im not happy", "im not okay", "eh", "i am sad",], logical_instance.ifeelbad),
+        "i feel bad": (["I'm feeling down", "I'm not doing well", "I'm feeling sad", "I'm upset", "I'm not in a good mood", "I'm feeling negative", "im doing bad", "im not so good", "im sad", "im not happy", "im not okay", "eh", "i am sad","i feel sad"], logical_instance.ifeelbad),
         "discuss hobbies": (["tell me about your hobbies", "what do you like to do", "what are your favorite activities", "how do you spend your free time", "what interests you", "what are your hobbies", "do you have hobbys", "got any hobbies", "hobby", "hobbies", "what is your current hobby"], logical_instance.discuss_hobbies),
         "xac hellven": (["who is this xac person", "what do you know about xac hellven", "tell me more about xac", "who is this xac hellven guy", "what's the deal with xac hellven"], logical_instance.xac_facts),
         "youtube": (["go to youtube", "launch youtube", "start youtube", "take me to youtube", "I want to watch youtube videos"], logical_instance.youtube),
@@ -985,6 +1187,9 @@ def get_intents(logical_instance):
         "merge pdfs": (["join pdf files", "consolidate pdfs", "unite pdfs", "blend pdfs", "fuse pdfs","merge pdfs"], logical_instance.merge_pdfs),
         "pass check": (["verify my password", "evaluate password strength", "assess password security", "rate my password", "analyze password robustness"], logical_instance.checkapass),
         "png to pdf": (["png to pdf","change png to pdf", "transform png to pdf", "alter png to pdf", "turn png into pdf", "switch png to pdf"], logical_instance.png_to_pdf),
-        "": ([" "], logical_instance.typeSomething)
+        "": ([" "], logical_instance.typeSomething),
+        "start pomodoro": (["start pomodoro timer", "begin pomodoro session", "initiate pomodoro technique", "commence pomodoro timer", "launch pomodoro", "start pomo"], logical_instance.start_pomodoro),
+        "stop pomodoro": (["stop pomodoro timer", "end pomodoro session", "terminate pomodoro technique", "halt pomodoro timer", "stop pomodoro", "end pomo"], logical_instance.stop_pomodoro),
+        "change name": (["change my name", "update my name", "modify my name", "adjust my name", "alter my name", "rename me", "new name", "i want a new name"], logical_instance.change_name),
 }
     return intents

@@ -2,6 +2,11 @@
 import subprocess
 import sys
 import os
+def get_user_name():
+    user_name = input("What's your name? ")
+    with open('user_name.txt', 'w') as f:
+        f.write(user_name)
+    print(f"Hello, {user_name}! Your name has been saved.")
 
 def install_package(package):
     try:
@@ -59,6 +64,12 @@ print("Hello, User!\nThis file will install all the necessary libraries to run t
 print("--------------------------------------------------------------------------------------------------------------------------")
 
 try:
+    if not os.path.exists('user_name.txt'):
+        get_user_name()
+    else:
+        with open('user_name.txt', 'r') as f:
+            user_name = f.read().strip()
+        print(f"Welcome, {user_name}!")
     wantspacy = input("Please type 1 if you would like to install spacy automatically. Else, please type anything to continue... ")
     if wantspacy == '1':
         getspacy()
@@ -140,6 +151,7 @@ try:
 except Exception as e:
     print(f"An error occurred --> {e}")
 
+
 print("All done! This file can now be safely closed.")
 print("-------------------------")
 print("READ ME and CHATBOT will be automatically opened. Type anything to now close this file...")
@@ -148,6 +160,8 @@ try:
     script_directory = os.path.dirname(os.path.abspath(__file__))
     readme_file = os.path.join(script_directory, "README.txt")
     os.startfile(readme_file)
+    chatbot_file = os.path.join(script_directory, "HalGUI.py")
+    os.startfile(chatbot_file)
 except Exception as e:
     print(f"An error occurred --> {e}")
 x = input("")
