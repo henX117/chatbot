@@ -922,6 +922,30 @@ class logical:
         else:
             return "huh"
 
+    def find_intent(self, user_input):
+        doc = self.nlp(user_input)
+
+        if doc.cats:
+            highest_prob_intent = max(doc.cats, key=doc.cats.get)
+            if doc.cats[highest_prob_intent] > 0.7:
+                return highest_prob_intent
+        
+        input_doc = self.nlp(user_input)
+        max_similarity = 0
+        matched_intent = None
+        threshold = 0.75
+        for intent, templates in self.intent_templates.items():
+            for template_doc in templates:
+                similarity = input_doc.similarity(template_doc)
+                if similarity > max_similarity:
+                    max_similarity = similarity
+                    matched_intent = intent
+        if max_similarity >= threshold:
+            return matched_intent
+        else:
+            return "huh"
+
+
 def get_intents(logical_instance):
     intents = {
         "cls": (["clear screen", "reset screen", "wipe screen", "erase screen", "empty screen","clear the screen","reset the screen","erase the screen","empty screen","cls"], logical_instance.cls),
