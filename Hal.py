@@ -32,15 +32,21 @@ class Chatbot(logical):
                     print(f"An error occurred: {str(e)}")
             self.check_reminders()
 
+script_dir = os.path.dirname(os.path.abspath(__file__))
+os.chdir(script_dir)
+user_name_file = os.path.join(script_dir, 'user_name.txt')
+
 if __name__ == "__main__":
     try:
-        if not os.path.exists('user_name.txt'):
-            print("Username file not found. run setup.py first.")
-            exit()
         enable_tts = True
+        if not os.path.exists('user_name.txt'):
+            print("Username file not found...\n this was detected in Hal.py!")
+            name = input("Enter your name: ")
+            with open('user_name.txt', 'w') as f:
+                f.write(name)
     except Exception as L:
         print(f"Exception Error: {L}")
     api_key = OPENAI_API_KEY
     client = OpenAI(api_key=api_key) if api_key else None
     chatbot = Chatbot(api_key, client=client, enable_tts=enable_tts)
-    chatbot.main()  # Call the main() method here
+    chatbot.main()

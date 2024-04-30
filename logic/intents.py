@@ -37,8 +37,18 @@ class logical:
     def __init__(self, api_key=None, client=None, enable_tts=True):
         self.chatbot = 'Hal'
         self.fullchatbot = 'Halsey'
+        current_dir = os.getcwd()
+        print(f"Current working directory: {current_dir}")
+        file_path = 'user_name.txt'
+        print(f"looking for file: {file_path}")
+        if not os.path.exists(file_path):
+            print("Username file not found. Please run setup.py to create the file.")
+            input("Press Enter to exit...")
+            sys.exit(1)
+            
         with open('user_name.txt', 'r') as f:
             self.name = f.read().strip()
+
         self.client = client
         self.ENABLE_TTS = enable_tts
         self.speaker = Speaker(client=self.client, enable_tts=self.ENABLE_TTS)
@@ -194,7 +204,13 @@ class logical:
             self.speak_and_return(f"Here is a list of helpful commands, {self.name}.")
         else:
             print(f"here is a list of helpful commands,{self.name}.")
-        return self.commands
+        commands_table = ""
+        max_command_length = max(len(command) for command in self.commands.keys())
+
+        for command, description in self.commands.items():
+            padded_command = command.ljust(max_command_length)
+            commands_table += f"{padded_command} : {description}\n"
+        return commands_table
 
     def extract_app_name(self, command):
         doc = self.nlp(command)
@@ -205,7 +221,7 @@ class logical:
         return None
 
     def openapp(self):
-        self.speak("What app do you want to open?")
+        self.speaker.speak("What app do you want to open?")
         print("type cancel to stop trying to open an app")
         command = input("I want to open the app called: ")
         if command == 'cancel':
@@ -216,7 +232,7 @@ class logical:
                 try:
                     import AppOpener
                     print(f"Attempting to open {app_name}")
-                    self.speak(f"Attempting to open {app_name}")
+                    self.speaker.speak(f"Attempting to open {app_name}")
                     AppOpener.open(app_name)
                 except Exception as e:
                     print(f"Error trying to open {app_name}: {str(e)}")
@@ -229,7 +245,7 @@ class logical:
             return "" 
 
     def closeapp(self):
-        self.speak(f"What app do you want to close {self.name}")
+        self.speaker.speak(f"What app do you want to close {self.name}")
         command = input(f"What app do you want to close, {self.name}?")
         try:
             from AppOpener import close
@@ -240,9 +256,9 @@ class logical:
             return self.speak_and_return(f"{command} does not want to cooperate and close. try again??")
 
     def analyze_sentence(self):
-        self.speak("Please enter the text that you want to analyze:")
+        self.speaker.speak("Please enter the text that you want to analyze:")
         command = input("Enter the text that you want to analyze:\n ")
-        self.speak("Do you want a text summarization or a visualization analysis?")
+        self.speaker.speak("Do you want a text summarization or a visualization analysis?")
         which_analysis = input("Which analysis do you want?\nText summary (1)\nVisualization (2)\n--> ")
     
         if which_analysis == '1':
@@ -253,13 +269,13 @@ class logical:
                 summary = summarizer.summarize(command, num_sentences)
                 return self.speak_and_return(f"Here's the summary:\n{summary}")
             except Exception as L:
-                self.speak(f"Sorry, {self.name}. I had an issue with getting analysis on that. I'll print the error code below")
+                self.speaker.speak(f"Sorry, {self.name}. I had an issue with getting analysis on that. I'll print the error code below")
                 return L
     
         elif which_analysis == '2':
             try:
                 from spacy import displacy
-                self.speak("Do you want a large analysis or small analysis?")
+                self.speaker.speak("Do you want a large analysis or small analysis?")
                 which_nlp = input("Which analysis do you want? 'small' or 'large'?\n").strip().lower()
             
                 if which_nlp == 'small':
@@ -275,9 +291,9 @@ class logical:
             # Perform Named Entity Recognition
                 entities = [(ent.text, ent.label_) for ent in doc.ents]
                 if entities:
-                    self.speak("Named Entities found:")
+                    self.speaker.speak("Named Entities found:")
                     for entity in entities:
-                        self.speak(f"{entity[0]} - {entity[1]}")
+                        self.speaker.speak(f"{entity[0]} - {entity[1]}")
                 else:
                     print("")
             
@@ -290,7 +306,7 @@ class logical:
                 with open(output_path, "w", encoding="utf-8") as f:
                     f.write(html_combined)
             
-                self.speak(f"Visualization analysis completed. Opening {output_path} in the web browser.")
+                self.speaker.speak(f"Visualization analysis completed. Opening {output_path} in the web browser.")
                 webbrowser.open(output_path)
             
                 return "Visualization analysis completed."
@@ -626,7 +642,7 @@ class logical:
 
     def angy(self):
         if self.ENABLE_TTS:
-            return self.speak(f"Alright, {self.name} you are sounding a little angry.")
+            return self.speaker.speak(f"Alright, {self.name} you are sounding a little angry.")
         else:
             return f"Alright, {self.name}, you're sounding a little angry.."
     def copy(self):
@@ -833,9 +849,9 @@ class logical:
             setup = joke['setup']
             punchline = joke['punchline']
             if self.ENABLE_TTS:
-                self.speak(setup)
+                self.speaker.speak(setup)
                 time.sleep(1)
-                self.speak(punchline)
+                self.speaker.speak(punchline)
             return f"{setup}\n{punchline}"
         else:
             return f"{self.name}, I couldn't fetch a joke right now. Maybe this is a joke."
