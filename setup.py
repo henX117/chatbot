@@ -136,7 +136,13 @@ try:
         install_package('aiohttp')
     else:
         print("not installed")
-
+    
+    wantopenpyxl = input("Type 1 to install openpyxl")
+    if wantopenpyxl == '1':
+        install_package('openpyxl')
+    else:
+        print("not installed")
+        
 except Exception as e:
     print(f"An error occurred --> {e}")
 
