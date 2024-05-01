@@ -142,18 +142,13 @@ try:
         install_package('openpyxl')
     else:
         print("not installed")
+    
+    wantmatplotlib = input("Type 1 to install matplotlib")
+    if wantmatplotlib == '1':
+        install_package('matplotlib')
+    else:
+        print("not installed")
         
-except Exception as e:
-    print(f"An error occurred --> {e}")
-
-print("All done! This file can now be safely closed.")
-print("-------------------------")
-print("READ ME and CHATBOT will be automatically opened. Type anything to now close this file...")
-print("-------------------------")
-try:
-    script_directory = os.path.dirname(os.path.abspath(__file__))
-    readme_file = os.path.join(script_directory, "README.txt")
-    os.startfile(readme_file)
 except Exception as e:
     print(f"An error occurred --> {e}")
 
@@ -168,5 +163,9 @@ if iwantspacytraining == '1':
         subprocess.Popen([sys.executable, spacy_training_file])
     except Exception as e:
         print(f"An error occurred --> {e}")
+print("-------------------------------------------------------------------------")
+print("you can how launch user_setup.py")
+print("Setup is complete! Please type anything to exit.")
+print("type anything to exit...")
 x = input("")
 quit()
