@@ -150,5 +150,17 @@ try:
     os.startfile(readme_file)
 except Exception as e:
     print(f"An error occurred --> {e}")
+
+print("-------------------------")
+print("Please type '1' to begin training the SpaCy model.")
+iwantspacytraining = input()
+if iwantspacytraining == '1':
+    try:
+        script_directory = os.path.dirname(os.path.abspath(__file__))
+        spacy_training_file = os.path.join(script_directory, "logic","SpaCy","SpaCy_Training.py")
+        os.startfile(spacy_training_file)
+        subprocess.Popen([sys.executable, spacy_training_file])
+    except Exception as e:
+        print(f"An error occurred --> {e}")
 x = input("")
 quit()
