@@ -73,6 +73,10 @@ for i in range(10):
     
     print(f"Epoch {i+1}: Loss = {epoch_losses['textcat']:.3f}, Accuracy = {accuracy:.3f}")
 
+model_dir = current_dir
+nlp.to_disk(model_dir)
+print("Officially trained the model!")
+print("graphing the models accuracy and loss...")
 plt.figure(figsize=(12, 6))
 
 plt.subplot(1, 2, 1)
@@ -91,6 +95,6 @@ plt.tight_layout()
 plt.show()
 
 # Save the trained model relative to the current script's directory
-model_dir = os.path.join(current_dir, "SpaCy")
+model_dir = current_dir
 nlp.to_disk(model_dir)
-print("Officially trained the model!")
+print("File can be safely closed!")
