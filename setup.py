@@ -19,6 +19,7 @@ def getspacy():
     print('Small language model installed...')
     subprocess.check_call([sys.executable, '-m', 'spacy', 'download', 'en_core_web_lg'])
     print("Large language model installed...")
+    install_package('spacy-lookups-data')
     print("All of spacy has finished installing!")
     print("-------------------------------------------------------------------------")
 
@@ -148,6 +149,7 @@ try:
         install_package('matplotlib')
     else:
         print("not installed")
+    
         
 except Exception as e:
     print(f"An error occurred --> {e}")
