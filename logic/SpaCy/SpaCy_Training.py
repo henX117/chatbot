@@ -1,3 +1,4 @@
+import os
 import spacy
 from spacy.util import minibatch, compounding
 from spacy.training import Example
@@ -41,8 +42,11 @@ def calculate_accuracy(model, data):
     accuracy = correct / total
     return accuracy
 
+# Get the path to the training data file relative to the current script
+current_dir = os.path.dirname(os.path.abspath(__file__))
+training_file = os.path.join(current_dir, "training_data.xlsx")
+
 # Load training data from Excel file
-training_file = "C:\\Users\\henry\\Desktop\\chatbot-1.1.3\\logic\\SpaCy\\training_data.xlsx"
 train_data, labels = load_training_data(training_file)
 
 for label in labels:
@@ -86,6 +90,7 @@ plt.title('Training Loss')
 plt.tight_layout()
 plt.show()
 
-# Save the trained model
-nlp.to_disk("C:\\Users\\henry\\Desktop\\chatbot-1.1.3\\logic\\SpaCy")
+# Save the trained model relative to the current script's directory
+model_dir = os.path.join(current_dir, "SpaCy")
+nlp.to_disk(model_dir)
 print("Officially trained the model!")
