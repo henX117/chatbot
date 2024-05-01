@@ -3,7 +3,6 @@ from logic.intents import get_intents, logical
 from logic.api_keys import OPENAI_API_KEY
 from openai import OpenAI
 import asyncio
-
 class Chatbot(logical):
     def __init__(self, api_key, client=None, enable_tts=True):
         super().__init__(api_key, client=client)

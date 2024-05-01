@@ -53,7 +53,8 @@ class logical:
         self.ENABLE_TTS = enable_tts
         self.speaker = Speaker(client=self.client, enable_tts=self.ENABLE_TTS)
         self.reminders = []
-        self.nlp = spacy.load("en_core_web_lg")
+        model_dir = os.path.join(os.path.dirname(__file__), "SpaCy")
+        self.nlp = spacy.load(model_dir)
         self.intents = get_intents(self)
         self.intent_templates = self.preprocess_intent_templates()
         self.matcher = Matcher(self.nlp.vocab)
@@ -354,7 +355,9 @@ class logical:
             result = math_helper.help()
             print(result)
             return self.math()
-
+        if operation == 'exit':
+            return self.main()
+        
         if operation == 'statistics':
             stat_operation = input("Enter the statistical operation (mean, median, mode, stdev, variance)\n")
             data = input("Enter the data points (comma-separated):\n")
@@ -923,20 +926,13 @@ class logical:
         return self.speak_and_return (randomresp)
     
     def find_intent(self, user_input):
-        input_doc = self.nlp(user_input)
-        max_similarity = 0
-        matched_intent = None
-        threshold = 0.75
-        for intent, templates in self.intent_templates.items():
-            for template_doc in templates:
-                similarity = input_doc.similarity(template_doc)
-                if similarity > max_similarity:
-                    max_similarity = similarity
-                    matched_intent = intent
-        if max_similarity >= threshold:
-            return matched_intent
-        else:
-            return "huh"
+        doc = self.nlp(user_input)
+        if doc.cats:
+            predicted_intent = max(doc.cats, key=doc.cats.get)
+            confidence = doc.cats[predicted_intent]
+            if confidence > 0.5:
+                return predicted_intent
+        return "huh"
 
     def find_intent(self, user_input):
         doc = self.nlp(user_input)
@@ -967,44 +963,44 @@ def get_intents(logical_instance):
         "cls": (["clear screen", "reset screen", "wipe screen", "erase screen", "empty screen","clear the screen","reset the screen","erase the screen","empty screen","cls"], logical_instance.cls),
         "help": (["what can you do", "what are your capabilities", "help me", "I need assistance", "assist me", "guide me", "what are my options", "what commands are available","help","i need help","can you assist me","how does this work","show me the available commands","commands","capabilities"], logical_instance.ineedhelp),
         "time": (["current time", "what's the time", "time now", "tell me the time", "what time is it currently", "what's the current time","what time is it","tell me the time now","could you give me the time","time check","check time",], logical_instance.time),
-        "open app": (["launch application", "start program", "run software", "initiate app", "begin application", "open software","open an app", "I want to open an app", "I want to open an application", "launch an app for me", ""], logical_instance.openapp),
-        "close app": (["terminate application", "kill program", "exit software", "close program", "end application", "shut down software", "close an app", "close an application for me", "shut down an app",], logical_instance.closeapp),
+        "open_app": (["launch application", "start program", "run software", "initiate app", "begin application", "open software","open an app", "I want to open an app", "I want to open an application", "launch an app for me", ""], logical_instance.openapp),
+        "close_app": (["terminate application", "kill program", "exit software", "close program", "end application", "shut down software", "close an app", "close an application for me", "shut down an app",], logical_instance.closeapp),
         "analyze": (["perform text analysis", "analyze this text", "process this sentence", "examine this text", "interpret this sentence", "assess this text","analyze a paper for me", "analyze this sentence","do text analysis", "check this text", "analyze", "analyze a sentence"], lambda: logical_instance.analyze_sentence),
         "math": (["solve math problem", "calculate", "perform calculation", "do arithmetic", "evaluate expression", "solve equation", "simplify math", "crunch numbers","i need to calculate something", "can you help me with maths", "i want to solve a math problem", "do some math", "lets do math", "lets do some math", "do math", "math", "derivation", "add", "subtract", "multiply",], logical_instance.math),
         "thanks": (["thank you so much", "I really appreciate it", "thanks a lot", "many thanks", "I'm grateful", "you're awesome", "I owe you one", "thanks", "thank you", "i give you my thanks", "i appreciate it", "respect", "thats whats up",], logical_instance.thanks),
         "quit": (["goodbye", "see you later", "terminate", "shut down", "exit", "close", "leave", "end session","i quit", "i want to quit", "i want to leave", "im finished", "can i quit"], logical_instance.quitter),
-        "joke": (["tell me another joke", "make me laugh again", "give me another joke", "I want to hear a funny joke", "entertain me with a joke", "crack a joke","say something funny","joke", "tell me a joke", "are you funny",], logical_instance.tell_joke),
+        "tell_joke": (["tell me another joke", "make me laugh again", "give me another joke", "I want to hear a funny joke", "entertain me with a joke", "crack a joke","say something funny","joke", "tell me a joke", "are you funny",], logical_instance.tell_joke),
         "weather": (["what's the weather forecast", "how's the weather today", "give me the weather conditions", "what's the temperature outside", "will it rain today", "check the weather", "weather", "whats the weather like", "whats the weather like in", "tell me the weather in", "whats the weather", "show me the weather", "how cold is it outside", "how hot is it outside",], lambda: logical_instance.get_weather(input("Enter a location:\n"))),
-        "rock paper scissors": (["play RPS", "start a game of rock paper scissors", "let's play rock paper scissors", "begin rock paper scissors", "initiate RPS game","rock paper scissors",], lambda: logical_instance.rockpaperscissors()),
+        "rock_paper_scissors": (["play RPS", "start a game of rock paper scissors", "let's play rock paper scissors", "begin rock paper scissors", "initiate RPS game","rock paper scissors",], lambda: logical_instance.rockpaperscissors()),
         "greetings": (["good day", "howdy", "greetings", "nice to meet you", "pleasure to meet you", "what's up", "how's it going","hello","hi","good morning", "good afternoon", "good evening", "whats up", "sup", "hey"], logical_instance.handle_greeting),
-        "how are you": (["how's your day", "how have you been", "how's life", "how are things", "what's new with you", "how are you holding up", "how are you", "how are you doing", "how are you feeling"], logical_instance.howareyou),
-        "what is your name": (["who are you","what should I call you", "how do you call yourself", "what name do you go by", "whats your name", "tell me your name",], logical_instance.myname),
-        "my name": (["what do you call me", "do you know my name", "what am I called", "how do you address me", "who do you think I am","who am i", "what is my name", "whats my name", "my name",], logical_instance.yournameis),
+        "how_are_you": (["how's your day", "how have you been", "how's life", "how are things", "what's new with you", "how are you holding up", "how are you", "how are you doing", "how are you feeling"], logical_instance.howareyou),
+        "what_is_your_name": (["who are you","what should I call you", "how do you call yourself", "what name do you go by", "whats your name", "tell me your name",], logical_instance.myname),
+        "my_name": (["what do you call me", "do you know my name", "what am I called", "how do you address me", "who do you think I am","who am i", "what is my name", "whats my name", "my name",], logical_instance.yournameis),
         "windows": (["what windows version is this", "windows details", "what windows am I using", "tell me about the operating system", "what OS is this", "windows version",], logical_instance.operatingsystem),
         "sorry": (["my mistake", "I apologize", "pardon me", "forgive me", "my bad", "I didn't mean that", "im sorry", "my apologies", "oops", "oopsies", "whoops","sorry about that",], logical_instance.oopsies),
-        "i feel good": (["I'm doing well", "I'm fine", "I'm fantastic", "I'm great, thanks for asking", "I'm happy", "I'm feeling positive", "i feel good", "im doing good",], logical_instance.ifeelgood),
-        "i feel bad": (["I'm feeling down", "I'm not doing well", "I'm feeling sad", "I'm upset", "I'm not in a good mood", "I'm feeling negative", "im doing bad", "im not so good", "im sad", "im not happy", "im not okay", "eh", "i am sad",], logical_instance.ifeelbad),
-        "discuss hobbies": (["tell me about your hobbies", "what do you like to do", "what are your favorite activities", "how do you spend your free time", "what interests you", "what are your hobbies", "do you have hobbys", "got any hobbies", "hobby", "hobbies", "what is your current hobby"], logical_instance.discuss_hobbies),
-        "xac hellven": (["who is this xac person", "what do you know about xac hellven", "tell me more about xac", "who is this xac hellven guy", "what's the deal with xac hellven"], logical_instance.xac_facts),
+        "feeling_good": (["I'm doing well", "I'm fine", "I'm fantastic", "I'm great, thanks for asking", "I'm happy", "I'm feeling positive", "i feel good", "im doing good",], logical_instance.ifeelgood),
+        "feeling_bad": (["I'm feeling down", "I'm not doing well", "I'm feeling sad", "I'm upset", "I'm not in a good mood", "I'm feeling negative", "im doing bad", "im not so good", "im sad", "im not happy", "im not okay", "eh", "i am sad",], logical_instance.ifeelbad),
+        "discuss_hobbies": (["tell me about your hobbies", "what do you like to do", "what are your favorite activities", "how do you spend your free time", "what interests you", "what are your hobbies", "do you have hobbys", "got any hobbies", "hobby", "hobbies", "what is your current hobby"], logical_instance.discuss_hobbies),
+        "xac_hellven": (["who is this xac person", "what do you know about xac hellven", "tell me more about xac", "who is this xac hellven guy", "what's the deal with xac hellven"], logical_instance.xac_facts),
         "youtube": (["go to youtube", "launch youtube", "start youtube", "take me to youtube", "I want to watch youtube videos"], logical_instance.youtube),
         "GPT": (["go to chat gpt", "launch chat gpt", "start chatting with gpt", "take me to gpt", "I want to chat with gpt"], logical_instance.gpt),
-        "enable tts": (["enable tts", "turn on text to speech", "activate tts", "start text to speech", "use text to speech", "speak the responses"], logical_instance.enable_tts),
-        "disable tts": (["disable tts", "turn off text to speech", "deactivate tts", "stop text to speech", "mute text to speech", "don't speak the responses"], logical_instance.disable_tts),
+        "enable_tts": (["enable tts", "turn on text to speech", "activate tts", "start text to speech", "use text to speech", "speak the responses"], logical_instance.enable_tts),
+        "disable_tts": (["disable tts", "turn off text to speech", "deactivate tts", "stop text to speech", "mute text to speech", "don't speak the responses"], logical_instance.disable_tts),
         "angry": (["I'm furious", "I'm enraged", "I'm livid", "you're making me angry", "I'm irritated", "I'm annoyed", "I'm mad at you"], logical_instance.angy),
         "copy": (["repeat after me", "say what I say", "copy my words", "mimic my speech", "echo my message", "parrot my words"], logical_instance.copy),
-        "time conversion": (["convert hours to minutes", "convert minutes to seconds", "how many minutes in an hour", "how many seconds in a minute", "time unit conversion"], logical_instance.timeconversion),
-        "calculate compound interest": (["compound interest calculation", "calculate CI", "find compound interest", "determine compound interest", "compute compound interest"], logical_instance.calccompoundinterest),
+        "time_conversion": (["convert hours to minutes", "convert minutes to seconds", "how many minutes in an hour", "how many seconds in a minute", "time unit conversion"], logical_instance.timeconversion),
+        "calculate_compound_interest": (["compound interest calculation", "calculate CI", "find compound interest", "determine compound interest", "compute compound interest"], logical_instance.calccompoundinterest),
         "remind": (["create a reminder", "remind me to", "set an alarm", "notify me", "add a reminder", "create an alert"], logical_instance.set_reminder),
         "wiki": (["search on wikipedia", "look up in wikipedia", "find on wikipedia", "get information from wikipedia", "wikipedia search"], logical_instance.search_wikipedia),
-        "random number": (["pick a random number", "choose a random number", "give me a random number", "generate random digits", "produce random numbers"], logical_instance.randomnumgen),
+        "random_number": (["pick a random number", "choose a random number", "give me a random number", "generate random digits", "produce random numbers"], logical_instance.randomnumgen),
         "lottery": (["pick lottery numbers", "generate lottery numbers", "choose lottery digits", "give me lucky numbers", "suggest lottery numbers","i want to play the lottery", "lottery", "give me numbers for my lottery ticket"], logical_instance.lottery),
         "dice": (["roll the dice", "throw the dice", "toss the dice", "roll dice", "give me a dice roll", "roll a dice"], logical_instance.diceroll),
-        "image generator": (["create a picture", "generate an illustration", "make an artwork", "produce an image", "draw an image"], logical_instance.dalle),
-        "merge pdfs": (["join pdf files", "consolidate pdfs", "unite pdfs", "blend pdfs", "fuse pdfs","merge pdfs"], logical_instance.merge_pdfs),
-        "pass check": (["verify my password", "evaluate password strength", "assess password security", "rate my password", "analyze password robustness"], logical_instance.checkapass),
-        "png to pdf": (["png to pdf","change png to pdf", "transform png to pdf", "alter png to pdf", "turn png into pdf", "switch png to pdf"], logical_instance.png_to_pdf),
-        "": ([" "], logical_instance.typeSomething),
-        "start pomo": (["start pomo", "begin pomo", "start pomodoro", "begin pomodoro",], logical_instance.start_pomo),
-        "stop pomo": (["stop pomo", "end pomo", "stop pomodoro", "end pomodoro",], logical_instance.stop_pomo),
+        "image_generator": (["create a picture", "generate an illustration", "make an artwork", "produce an image", "draw an image"], logical_instance.dalle),
+        "merge_pdfs": (["join pdf files", "consolidate pdfs", "unite pdfs", "blend pdfs", "fuse pdfs","merge pdfs"], logical_instance.merge_pdfs),
+        "pass_check": (["verify my password", "evaluate password strength", "assess password security", "rate my password", "analyze password robustness"], logical_instance.checkapass),
+        "png_to_pdf": (["png to pdf","change png to pdf", "transform png to pdf", "alter png to pdf", "turn png into pdf", "switch png to pdf"], logical_instance.png_to_pdf),
+        "say_something": ([" "], logical_instance.typeSomething),
+        "start_pomo": (["start pomo", "begin pomo", "start pomodoro", "begin pomodoro",], logical_instance.start_pomo),
+        "stop_pomo": (["stop pomo", "end pomo", "stop pomodoro", "end pomodoro",], logical_instance.stop_pomo),
 }
     return intents
