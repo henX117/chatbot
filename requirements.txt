@@ -1,4 +1,5 @@
 spacy
+spacy-lookups-data
 webbrowser
 openai
 requests
@@ -6,9 +7,12 @@ wikipedia
 inflect
 AppOpener
 gtts
-playsound
+pygame
 PyPDF4 
 pyttsx3
 sympy
 img2pdf
 aiohttp
+openpyxl
+matplotlib
+

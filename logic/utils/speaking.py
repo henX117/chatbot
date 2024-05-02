@@ -1,7 +1,12 @@
 import pyttsx3
 from openai import OpenAI
 from pathlib import Path
-import playsound
+import pygame
+import os
+import sys
+
+# Redirect stderr to a null device
+sys.stderr = open(os.devnull, 'w')
 
 class Speaker:
     def __init__(self, client=None, enable_tts=True):
@@ -21,7 +26,6 @@ class Speaker:
             self.engine.runAndWait()
         else:
             from pathlib import Path
-            import playsound
             try:
                 speech_file_path = Path(__file__).parent / "speech.mp3"
                 response = self.client.audio.speech.create(
@@ -33,8 +37,15 @@ class Speaker:
                 with open(speech_file_path, 'wb') as audio_file:
                     audio_file.write(audio_content)
                 try:
-                    playsound.playsound(str(speech_file_path), True)
+                    pygame.mixer.init()
+                    pygame.mixer.music.load(str(speech_file_path))
+                    pygame.mixer.music.play()
+                    while pygame.mixer.music.get_busy():
+                        pygame.time.Clock().tick(10)
+                    pygame.mixer.quit()
                 except Exception as e:
                     print(f"Error playing sound: {str(e)}")
+                finally:
+                    speech_file_path.unlink(missing_ok=True)
             except Exception as e:
                 print(f"Error generating speech: {str(e)}")

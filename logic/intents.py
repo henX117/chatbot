@@ -72,8 +72,10 @@ class logical:
             "cls": "clears the screen",
             "math": "to do mathematics!",
             "quit": "to leave the program",
-            'analyze': "to analyze",
+            'analyze': "to analyze text",
             "time": "tells the current time",
+            "open app": "opens an app",
+            "close app": "closes an app",
             "joke": "tells a joke",
             "news": "see whats on the headlines",
             "weather": "get weather information",
@@ -91,6 +93,10 @@ class logical:
             "calculate interest": "opens the compound interest calculator",
             "merge pdf": "merges pdf files into one. place the files in the 'PLACE_PDFs_HERE' folder.",
             "png to pdf": "turns a png into a pdf. Place the png into the 'PLACE_PDFs_HERE' folder.",
+            "time conversion": "converts hours into weeks, days, and hours",
+            "pass check": "checks if a password is strong",
+            "start pomodoro": "starts a pomodoro timer",
+            "stop pomodoro": "stops the pomodoro timer",
         }
     def preprocess_intent_templates(self):
         intent_templates = {}
@@ -177,7 +183,8 @@ class logical:
             return ""
 
     def speak_and_return(self, message):
-        self.speaker.speak(message)
+        if self.ENABLE_TTS:
+            self.speaker.speak(message)
         return message
 
     def diceroll(self):
@@ -260,7 +267,7 @@ class logical:
         self.speaker.speak("Please enter the text that you want to analyze:")
         command = input("Enter the text that you want to analyze:\n ")
         self.speaker.speak("Do you want a text summarization or a visualization analysis?")
-        which_analysis = input("Which analysis do you want?\nText summary (1)\nVisualization (2)\n--> ")
+        which_analysis = input("Which analysis do you want?\nText summary (1)\nVisualization (2)\nQuit (3)\n--> ")
     
         if which_analysis == '1':
             try:
@@ -314,7 +321,8 @@ class logical:
         
             except (ValueError, KeyError, SyntaxError):
                 self.speak_and_return("Something went wrong with the analysis. Please try again.")
-    
+        elif which_analysis == '3':
+            return self.main()
         else:
             return self.speak_and_return("Invalid analysis option. Please choose '1' for text summary or '2' for visualization.")
         
@@ -355,9 +363,17 @@ class logical:
             result = math_helper.help()
             print(result)
             return self.math()
-        if operation == 'exit':
+        if operation == 'quit':
             return self.main()
         
+        if operation == 'graph':
+            expression = input("Enter the mathematical expression: ")
+            try:
+                math_helper.graph(expression)
+                return self.speak_and_return("Graph has been displayed.")
+            except Exception as L:
+                return self.speak_and_return(L)
+
         if operation == 'statistics':
             stat_operation = input("Enter the statistical operation (mean, median, mode, stdev, variance)\n")
             data = input("Enter the data points (comma-separated):\n")

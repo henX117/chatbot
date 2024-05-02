@@ -3,6 +3,10 @@ import math
 import spacy
 import sympy as sp
 import re
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+import numpy as np
+
 class MathHelper:
     def __init__(self):
         self.nlp = spacy.load("en_core_web_lg")
@@ -21,7 +25,13 @@ class MathHelper:
             'system of equations': (['solve system of equations', 'linear equations', 'simultaneous equations', "sys of eq","system of equations"], self.solve_system_of_equations),
             'statistics': (['statistics', 'stats', 'statistical analysis', 'data analysis',],self.statistics),
             'finite series sum': (['finite series sum','series summation','sum of series','sum of a series',"series sum"], self.finite_series_sum),
+            'graph': (['graph', 'plot', 'plot graph', 'draw graph', 'visualize'], self.graph),
+            'quit':(['quit', 'exit', 'goodbye', 'bye', 'stop', 'end', 'no thanks', 'go back', 'return'], None)
         }
+    
+    def quit(self):
+        return "Goodbye!"
+
     def help(self):
         commands = {
             'add': 'adds two numbers',
@@ -40,6 +50,50 @@ class MathHelper:
         }
         return (commands)
     
+    def graph(self, expression):
+        expression = re.sub(r'(\d)([a-zA-Z])', r'\1*\2', expression)
+        expression = re.sub(r'([a-zA-Z])(\d)', r'\1*\2', expression)
+        expression = re.sub(r'([a-zA-Z])([a-zA-Z])', r'\1*\2', expression)
+        try:
+            expr = sp.sympify(expression)
+            variables = list(expr.free_symbols)
+            if len(variables) == 1:
+                var = variables[0]
+                min_val = float(input(f"Enter the minimum value for {var}: "))
+                max_val = float(input(f"Enter the maximum value for {var}: "))
+                x_vals = np.linspace(min_val, max_val, 100)
+                y_vals = sp.lambdify(var, expr)(x_vals)
+                plt.figure(figsize=(8, 6))
+                plt.plot(x_vals, y_vals)
+                plt.xlabel(str(var))
+                plt.ylabel('y')
+                plt.title('Graph of ' + str(expr))
+                plt.grid(True)
+                plt.show()
+            elif len(variables) == 2:
+                var1, var2 = variables
+                min_val1 = float(input(f"Enter the minimum value for {var1}: "))
+                max_val1 = float(input(f"Enter the maximum value for {var1}: "))
+                min_val2 = float(input(f"Enter the minimum value for {var2}: "))
+                max_val2 = float(input(f"Enter the maximum value for {var2}: "))
+                x_vals = np.linspace(min_val1, max_val1, 100)
+                y_vals = np.linspace(min_val2, max_val2, 100)
+                X, Y = np.meshgrid(x_vals, y_vals)
+                Z = sp.lambdify((var1, var2), expr)(X, Y)
+                fig = plt.figure(figsize=(8, 6))
+                ax = fig.add_subplot(111, projection='3d')
+                ax.plot_surface(X, Y, Z)
+                ax.set_xlabel(str(var1))
+                ax.set_ylabel(str(var2))
+                ax.set_zlabel('z')
+                plt.title('3D Graph of ' + str(expr))
+                plt.show()
+            else:
+                return "The expression must contain one or two variables for graphing."
+            return "Graph plotted successfully."
+        except sp.SympifyError:
+            return "Invalid mathematical expression."
+
     def finite_series_sum(self, series_type, a, n, r=None):
         if series_type =='arithmetic':
             return (n/2) * (2*a+(n-1)*r)

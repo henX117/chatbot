@@ -3,33 +3,45 @@ from logic.intents import get_intents, logical
 from logic.api_keys import OPENAI_API_KEY
 from openai import OpenAI
 import asyncio
+import subprocess
+
 class Chatbot(logical):
     def __init__(self, api_key, client=None, enable_tts=True):
         super().__init__(api_key, client=client)
         self.ENABLE_TTS = enable_tts
 
     def main(self):
-        self.introduction()
-        while True:
-            command = input("").strip().lower()
-            intent = self.find_intent(command)
-            if intent == "huh":
-                response = self.huh()
-                print(response)
-            elif intent =="analyze":
-                response = self.analyze_sentence()
-                print(response)
-            else:
-                try:
-                    intent_function = self.intents.get(intent, (None, None))[1]
-                    if asyncio.iscoroutinefunction(intent_function):
-                        response = asyncio.run(intent_function())
-                    else:
-                        response = intent_function()
+        try:
+            self.introduction()
+            while True:
+                command = input("").strip().lower()
+                intent = self.find_intent(command)
+                if intent == "huh":
+                    response = self.huh()
                     print(response)
-                except Exception as e:
-                    print(f"An error occurred: {str(e)}")
-            self.check_reminders()
+                elif intent == "analyze":
+                    response = self.analyze_sentence()
+                    print(response)
+                else:
+                    try:
+                        intent_function = self.intents.get(intent, (None, None))[1]
+                        if asyncio.iscoroutinefunction(intent_function):
+                            response = asyncio.run(intent_function())
+                        else:
+                            response = intent_function()
+                        print(response)
+                    except subprocess.CalledProcessError as e:
+                        if e.returncode == 305:
+                            # Ignore the error and continue execution
+                            pass
+                        else:
+                            # Handle other exceptions or re-raise the exception
+                            raise
+                    except Exception as e:
+                        print(f"An error occurred: {str(e)}")
+                self.check_reminders()
+        except KeyboardInterrupt:
+            print("\nExiting the chatbot. Goodbye!")
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 os.chdir(script_dir)
@@ -48,4 +60,6 @@ if __name__ == "__main__":
     api_key = OPENAI_API_KEY
     client = OpenAI(api_key=api_key) if api_key else None
     chatbot = Chatbot(api_key, client=client, enable_tts=enable_tts)
+    os.system('cls' if os.name == 'nt' else 'clear')
+
     chatbot.main()
