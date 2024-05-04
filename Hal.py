@@ -22,6 +22,15 @@ class Chatbot(logical):
                 elif intent == "analyze":
                     response = self.analyze_sentence()
                     print(response)
+                elif intent == "weather":
+                    #print("Calling get_weather function...")
+                    #print("User input:", command)  # Print the user input
+                    #print("Matched intent:", intent)  # Print the matched intent
+                    slot_values = self.extract_slot_values(command, intent)
+                    filled_slots = self.fill_slots(intent, slot_values)
+                    #print("Filled slots for get_weather:", filled_slots)  # Print the filled_slots dictionary
+                    response = self.get_weather(filled_slots)
+                    print(response)
                 else:
                     try:
                         intent_function = self.intents.get(intent, (None, None))[1]

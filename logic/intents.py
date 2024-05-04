@@ -22,6 +22,7 @@ from pathlib import Path
 from openai import OpenAI
 from .api_keys import OPENAI_API_KEY
 from .api_keys import WEATHER_API_KEY
+#print(f"WEATHER API KEY: {WEATHER_API_KEY}")
 from .api_keys import JOKES_API_KEY
 import pyttsx3
 import asyncio
@@ -29,6 +30,7 @@ import aiohttp
 from .utils.pomodoro import Pomodoro
 from .utils.speaking import Speaker
 from .utils.text_sum import TextSummarizer
+import re
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
 sys.path.insert(0, parent_dir)
@@ -97,10 +99,17 @@ class logical:
             "pass check": "checks if a password is strong",
             "start pomodoro": "starts a pomodoro timer",
             "stop pomodoro": "stops the pomodoro timer",
+            "api key": f"weather api key: {WEATHER_API_KEY}",
         }
     def preprocess_intent_templates(self):
         intent_templates = {}
-        for intent, (templates, _) in self.intents.items():
+        for intent, value in self.intents.items():
+            if isinstance(value, tuple):
+                templates, _ = value
+            elif isinstance(value, dict):
+                templates = value["patterns"]
+            else:
+                raise ValueError(f"Invalid intent value for {intent}")
             intent_templates[intent] = [self.nlp(template) for template in templates]
         return intent_templates
     
@@ -475,46 +484,58 @@ class logical:
         response = random.choice(thank_responses)
         return self.speak_and_return(response)
 
-    def get_weather(self, city):
-        current_time = time.time()
+    def get_weather(self, filled_slots):
+        # Check for empty slots and prompt user if location is not provided
+        if not filled_slots or "location" not in filled_slots:
+            location = input("Please provide the location: ")
+            filled_slots["location"] = location
+        else:
+            location = filled_slots["location"]
 
-        if city in self.weather_cache and current_time - self.weather_cache[city]["timestamp"] < self.weather_cache_expiration:
-            # Return cached response if available and not expired
-            return self.speak_and_return(self.weather_cache[city]["response"])
-
-        # Make API call if cache is not available or expired
         api_key = WEATHER_API_KEY
         base_url = "http://api.weatherstack.com/current"
         params = {
             "access_key": api_key,
-            "query": city,
+            "query": location,
             "units": "f"
         }
-        response = requests.get(base_url, params=params)
 
-        if response.status_code == 200:
+        try:
+            response = requests.get(base_url, params=params)
+            response.raise_for_status()  # Raise an exception for 4xx or 5xx status codes
             data = response.json()
+
+            if 'success' in data and data['success'] is False:
+                error_message = f"Error: {data['error']['info']}"
+                print(error_message)
+                return self.speak_and_return(error_message)
+
             if 'current' in data:
                 current = data['current']
                 weather_descriptions = current.get('weather_descriptions', ['Not Available'])[0]
                 temperature = current.get('temperature', 'Not Available')
                 feelslike = current.get('feelslike', 'Not Available')
 
-                weather_info = (f"Weather in {city.title()}: {weather_descriptions}, "
+                weather_info = (f"{location}: {weather_descriptions}, "
                                 f"Temperature: {temperature} degrees, "
                                 f"Feels like: {feelslike} degrees.")
-                
-                # Cache the response
-                self.weather_cache[city] = {
-                    "timestamp": current_time,
-                    "response": f"{self.name}, here's the weather information: \n {weather_info}"
-                }
-                
+
                 return self.speak_and_return(f"{self.name}, here's the weather information: \n {weather_info}")
             else:
-                return "Weather data not found. Please try another location."
-        else:
-            return "Failed to retrieve weather data. Please try again later."
+                error_message = f"Weather data not found for {location}. Please try another location."
+                print(error_message)
+                return self.speak_and_return(error_message)
+
+        except requests.exceptions.RequestException as e:
+            import traceback
+            print(traceback.format_exc())
+            error_message = f"Error occurred while fetching weather data for {location}: {str(e)}"
+            print(error_message)
+            return self.speak_and_return(error_message)
+
+        except Exception as e:
+            print(f"An unexpected error occurred: {str(e)}")
+            return self.speak_and_return("An unexpected error occurred. Please try again later.")
 
     def time(self):
         d = datetime.now()
@@ -535,7 +556,7 @@ class logical:
             f"whats up {self.name}",
             f"heyy",
         ]
-        response = random.choice(greeting_responses)
+        response = random.choice(greeting_responses, WEATHER_API_KEY)
         return self.speak_and_return(response)
 
     def howareyou(self):
@@ -926,7 +947,8 @@ class logical:
             return f"There are multiple results for '{query}'. Did you mean one of these?\n{','.join(options)}"
         except wikipedia.exceptions.PageError:
             return f"sorry, I couldn't find a Wikipedia page for {query}"
-    
+    def news(self):
+        return self.speak_and_return("I'm sorry, I can't fetch the news right now. Please try again later.")
     def huh(self):
         responses = [
             "I'm sorry what now?",
@@ -942,25 +964,18 @@ class logical:
         return self.speak_and_return (randomresp)
     
     def find_intent(self, user_input):
-        doc = self.nlp(user_input)
-        if doc.cats:
-            predicted_intent = max(doc.cats, key=doc.cats.get)
-            confidence = doc.cats[predicted_intent]
-            if confidence > 0.5:
-                return predicted_intent
-        return "huh"
-
-    def find_intent(self, user_input):
+        #print(f"find_intent: Finding intent for user input: {user_input}")
+        matched_intent = None  # Initialize matched_intent to None
         doc = self.nlp(user_input)
 
         if doc.cats:
             highest_prob_intent = max(doc.cats, key=doc.cats.get)
+            #print(f"Matched intent using SpaCy NLP: {highest_prob_intent}")
             if doc.cats[highest_prob_intent] > 0.7:
-                return highest_prob_intent
-        
+                matched_intent = highest_prob_intent  # Assign the matched intent
+
         input_doc = self.nlp(user_input)
         max_similarity = 0
-        matched_intent = None
         threshold = 0.75
         for intent, templates in self.intent_templates.items():
             for template_doc in templates:
@@ -969,10 +984,52 @@ class logical:
                     max_similarity = similarity
                     matched_intent = intent
         if max_similarity >= threshold:
-            return matched_intent
+            pass
         else:
-            return "huh"
+            #print("No intent matched")
+            matched_intent = "huh"
 
+        # Print the matched intent after it has been assigned
+        #print(f"find_intent: Matched intent: {matched_intent}")
+        return matched_intent
+
+    def extract_slot_values(self, user_input, intent):
+        slot_values = {}
+
+        # Use regular expressions to extract the location
+        location_pattern = r"(in|for)\s*(\w+(?:\s+\w+)*)"
+        match = re.search(location_pattern, user_input, re.IGNORECASE)
+        if match:
+            slot_values["location"] = match.group(2).strip()
+        else:
+            print(f"No location found in the user input: {user_input}")
+
+        # Set the default date to today's date
+        slot_values["date"] = datetime.now().strftime("%Y-%m-%d")
+
+        #print(f"Extracted slot values: {slot_values}")
+        return slot_values
+
+    def fill_slots(self, intent, slot_values):
+        #print("Filling slots for intent:", intent)
+        #print("Slot values:", slot_values)
+        filled_slots = slot_values.copy()
+        #print("Initial filled_slots:", filled_slots)
+
+        # If both location and date are present, no need to prompt the user
+        if "location" in filled_slots and "date" in filled_slots:
+            #print("Both location and date are provided, no need to prompt the user")
+            pass
+        else:
+            # Check for missing slots and prompt the user if necessary
+            print("Checking for missing slots...")
+            for slot in self.intents[intent]["slots"]:
+                if slot not in filled_slots:
+                    slot_value = input(f"Please provide the {slot}: ")
+                    filled_slots[slot] = slot_value
+
+        #print("Final filled_slots:", filled_slots)
+        return filled_slots
 
 def get_intents(logical_instance):
     intents = {
@@ -986,7 +1043,15 @@ def get_intents(logical_instance):
         "thanks": (["thank you so much", "I really appreciate it", "thanks a lot", "many thanks", "I'm grateful", "you're awesome", "I owe you one", "thanks", "thank you", "i give you my thanks", "i appreciate it", "respect", "thats whats up",], logical_instance.thanks),
         "quit": (["goodbye", "see you later", "terminate", "shut down", "exit", "close", "leave", "end session","i quit", "i want to quit", "i want to leave", "im finished", "can i quit"], logical_instance.quitter),
         "tell_joke": (["tell me another joke", "make me laugh again", "give me another joke", "I want to hear a funny joke", "entertain me with a joke", "crack a joke","say something funny","joke", "tell me a joke", "are you funny",], logical_instance.tell_joke),
-        "weather": (["what's the weather forecast", "how's the weather today", "give me the weather conditions", "what's the temperature outside", "will it rain today", "check the weather", "weather", "whats the weather like", "whats the weather like in", "tell me the weather in", "whats the weather", "show me the weather", "how cold is it outside", "how hot is it outside",], lambda: logical_instance.get_weather(input("Enter a location:\n"))),
+        "news": (["news", "headlines"], logical_instance.news),
+        "weather": {
+            "patterns": ["what's the weather forecast", "how's the weather today", "give me the weather conditions", "what's the temperature outside", "will it rain today", "check the weather", "weather", "whats the weather like", "whats the weather like in", "tell me the weather in", "whats the weather", "show me the weather", "how cold is it outside", "how hot is it outside",],
+            "slots": {
+                "location": None,
+                "date": None,
+            },
+            "handler": logical_instance.get_weather
+        },
         "rock_paper_scissors": (["play RPS", "start a game of rock paper scissors", "let's play rock paper scissors", "begin rock paper scissors", "initiate RPS game","rock paper scissors",], lambda: logical_instance.rockpaperscissors()),
         "greetings": (["good day", "howdy", "greetings", "nice to meet you", "pleasure to meet you", "what's up", "how's it going","hello","hi","good morning", "good afternoon", "good evening", "whats up", "sup", "hey"], logical_instance.handle_greeting),
         "how_are_you": (["how's your day", "how have you been", "how's life", "how are things", "what's new with you", "how are you holding up", "how are you", "how are you doing", "how are you feeling"], logical_instance.howareyou),

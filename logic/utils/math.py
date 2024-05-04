@@ -23,7 +23,7 @@ class MathHelper:
             'help': (['i need help', 'what operations are available', 'assistance', "help me", "what can i do", "options", "what are the options","what can you do"," ", "operations"],self.help),
             'equation': (['solve equation','solve for', 'find the value'], self.equation),
             'system of equations': (['solve system of equations', 'linear equations', 'simultaneous equations', "sys of eq","system of equations"], self.solve_system_of_equations),
-            'statistics': (['statistics', 'stats', 'statistical analysis', 'data analysis',],self.statistics),
+            'statistics': (['statistics', 'stats', 'statistical analysis', 'data analysis','i want to do statistics'],self.statistics),
             'finite series sum': (['finite series sum','series summation','sum of series','sum of a series',"series sum"], self.finite_series_sum),
             'graph': (['graph', 'plot', 'plot graph', 'draw graph', 'visualize'], self.graph),
             'quit':(['quit', 'exit', 'goodbye', 'bye', 'stop', 'end', 'no thanks', 'go back', 'return'], None)
