@@ -121,19 +121,11 @@ class logical:
         self.pomodoro_timer.stop_timer()
         return self.speak_and_return("Pomodoro timer stopped.")
 
-    def lottery(*args):
-        while True:
-            try:
-                num_tickets = int(input("Enter the number of lottery tickets you want to generate:"))
-                if num_tickets <=0:
-                    raise ValueError
-                break
-            except ValueError:
-                print("Invalid input. Please enter a positive interger...idiot.")
+    def lottery(self, num_tickets=1):
         tickets = []
         for _ in range(num_tickets):
-            regular_numbers = random.sample(range(1,70),5)
-            special_number = random.randint(1,25)
+            regular_numbers = random.sample(range(1, 70), 5)
+            special_number = random.randint(1, 25)
             ticket = (tuple(sorted(regular_numbers)), special_number)
             tickets.append(ticket)
         print("-----Generated Lottery Tickets-----")
@@ -556,7 +548,7 @@ class logical:
             f"whats up {self.name}",
             f"heyy",
         ]
-        response = random.choice(greeting_responses, WEATHER_API_KEY)
+        response = random.choice(greeting_responses)
         return self.speak_and_return(response)
 
     def howareyou(self):
@@ -846,15 +838,40 @@ class logical:
             print(f"An error occurred during PNG to PDF conversion: {str(e)}")
             return self.speak_and_return("An error occurred during PNG to PDF conversion.")
 
-
-    def checkapass(self):
+    def checkapass(self, user_input):
+        #print("checkapass intent function started...")
         from .utils.passcheck import passwords
-        password = input("Enter a password to check it's strenght")
-        if passwords.is_strong_password(password):
-            return self.speak_and_return("Strong password! Good job!")
-        else:
-            return self.speak_and_return("Weak password. Fix dat!")
+        #print("passwords imported")
 
+        # Extract the password slot value using regular expressions
+        #print("starting password extraction...")
+        password_patterns = [
+            r"check if my password (.*?) is strong",
+            r"could you assist me in determining if (.*?) is a strong password or not",
+            r"check my password strength for (.*?)",
+            r"verify my password (.*?)",
+            r"evaluate password strength of (.*?)",
+            r"can you check the strength of my password (.*?)",
+            r"password\s+(.*?)",  # Capture the password immediately after "password" and whitespace
+            r"tell me the strength of (.*?) as a password",  # New pattern added
+        ]
+        #print("password patterns created...")
+        password = None
+        for pattern in password_patterns:
+            match = re.search(pattern, user_input, re.IGNORECASE)
+            if match:
+                #print("match found!")
+                password = match.group(1).strip()
+                break
+
+        if password:
+            if passwords.is_strong_password(password):
+                return self.speak_and_return(f"The password '{password}' is a strong password! Good job!")
+            else:
+                return self.speak_and_return(f"The password '{password}' is a weak password. Please make it stronger.")
+        else:
+            return self.speak_and_return("I couldn't find a password in your input. Please provide a password to check its strength.")   
+    
     def merge_pdfs(self): #problem! "An error occurred while merging PDFs: No module named 'pdfs'"
         self.speak_and_return ("Make sure to have the PDFs in the 'PLACE_PDFs_HERE' folder!")
         X = input("Press any key to continue...")
@@ -959,24 +976,32 @@ class logical:
             f"I didn't understand that,{self.name}.",
             f"I did not understand that, remember that you can type 'help' to see my capabilities.",
             "I didn't quite understand that",
+            "I'm sorry, I didn't get that.",
+            "I'll pretend that I understood that.",
+            "I'm sorry, I didn't catch that.",
+            "wait what?",
+            "I don't think that matched an intent that I am capable of yet."
         ]
         randomresp = random.choice(responses)
         return self.speak_and_return (randomresp)
     
     def find_intent(self, user_input):
-        #print(f"find_intent: Finding intent for user input: {user_input}")
-        matched_intent = None  # Initialize matched_intent to None
+        if user_input.strip() == " ":
+            return "say_something"
+        
         doc = self.nlp(user_input)
 
         if doc.cats:
             highest_prob_intent = max(doc.cats, key=doc.cats.get)
-            #print(f"Matched intent using SpaCy NLP: {highest_prob_intent}")
             if doc.cats[highest_prob_intent] > 0.7:
-                matched_intent = highest_prob_intent  # Assign the matched intent
+                #print(f"Detected intent: {highest_prob_intent}")
+                return highest_prob_intent
 
+        # Fallback mechanism using intent_templates
         input_doc = self.nlp(user_input)
         max_similarity = 0
-        threshold = 0.75
+        matched_intent = None
+        threshold = 0.7
         for intent, templates in self.intent_templates.items():
             for template_doc in templates:
                 similarity = input_doc.similarity(template_doc)
@@ -984,14 +1009,11 @@ class logical:
                     max_similarity = similarity
                     matched_intent = intent
         if max_similarity >= threshold:
-            pass
+            #print(f"Detected intent: {matched_intent}")
+            return matched_intent
         else:
-            #print("No intent matched")
-            matched_intent = "huh"
-
-        # Print the matched intent after it has been assigned
-        #print(f"find_intent: Matched intent: {matched_intent}")
-        return matched_intent
+            #print("No intent detected")
+            return "huh"
 
     def extract_slot_values(self, user_input, intent):
         slot_values = {}
@@ -999,17 +1021,23 @@ class logical:
         # Use regular expressions to extract the location
         location_pattern = r"(in|for)\s*(\w+(?:\s+\w+)*)"
         match = re.search(location_pattern, user_input, re.IGNORECASE)
-        if match:
+        if match and intent != "lottery":
             slot_values["location"] = match.group(2).strip()
-        else:
-            print(f"No location found in the user input: {user_input}")
 
         # Set the default date to today's date
         slot_values["date"] = datetime.now().strftime("%Y-%m-%d")
 
-        #print(f"Extracted slot values: {slot_values}")
-        return slot_values
+        # Extract the number of lottery tickets
+        if intent == "lottery":
+            num_tickets_pattern = r"generate (\d+) lottery tickets|create (\d+) lottery tickets|i want (\d+) lottery tickets|give me (\d+) lottery tickets"
+            match = re.search(num_tickets_pattern, user_input, re.IGNORECASE)
+            if match:
+                num_tickets_str = next(group for group in match.groups() if group)
+                slot_values["num_tickets"] = int(num_tickets_str)
+            else:
+                slot_values["num_tickets"] = 1
 
+        return slot_values
     def fill_slots(self, intent, slot_values):
         #print("Filling slots for intent:", intent)
         #print("Slot values:", slot_values)
@@ -1022,12 +1050,14 @@ class logical:
             pass
         else:
             # Check for missing slots and prompt the user if necessary
-            print("Checking for missing slots...")
+            #print("Checking for missing slots...")
             for slot in self.intents[intent]["slots"]:
                 if slot not in filled_slots:
                     slot_value = input(f"Please provide the {slot}: ")
                     filled_slots[slot] = slot_value
 
+        if intent == "lottery" and "num_tickets" not in filled_slots:
+            filled_slots["num_tickets"] = 1
         #print("Final filled_slots:", filled_slots)
         return filled_slots
 
@@ -1074,11 +1104,32 @@ def get_intents(logical_instance):
         "remind": (["create a reminder", "remind me to", "set an alarm", "notify me", "add a reminder", "create an alert"], logical_instance.set_reminder),
         "wiki": (["search on wikipedia", "look up in wikipedia", "find on wikipedia", "get information from wikipedia", "wikipedia search"], logical_instance.search_wikipedia),
         "random_number": (["pick a random number", "choose a random number", "give me a random number", "generate random digits", "produce random numbers"], logical_instance.randomnumgen),
-        "lottery": (["pick lottery numbers", "generate lottery numbers", "choose lottery digits", "give me lucky numbers", "suggest lottery numbers","i want to play the lottery", "lottery", "give me numbers for my lottery ticket"], logical_instance.lottery),
+        "lottery": {
+            "patterns": [
+                "generate (.*) lottery tickets for me",
+                "create (.*) lottery tickets",
+                "i want (.*) lottery tickets",
+                "give me (.*) lottery tickets",
+                "pick lottery numbers",
+                "generate lottery numbers",
+                "generate lottery tickets",
+                "create lottery tickets",
+            ],
+            "slots": {
+                "num_tickets": None,
+            },
+            "handler": lambda user_input, filled_slots: logical_instance.lottery(filled_slots.get("num_tickets", 1))
+        },
         "dice": (["roll the dice", "throw the dice", "toss the dice", "roll dice", "give me a dice roll", "roll a dice"], logical_instance.diceroll),
         "image_generator": (["create a picture", "generate an illustration", "make an artwork", "produce an image", "draw an image"], logical_instance.dalle),
         "merge_pdfs": (["join pdf files", "consolidate pdfs", "unite pdfs", "blend pdfs", "fuse pdfs","merge pdfs"], logical_instance.merge_pdfs),
-        "pass_check": (["verify my password", "evaluate password strength", "assess password security", "rate my password", "analyze password robustness"], logical_instance.checkapass),
+        "pass_check": {
+            "patterns": ["verify my password", "evaluate password strength", "assess password security", "rate my password", "analyze password robustness", "check if my password (.*) is strong","could you assist me in determining if (.*) is a strong password or not", "check my password strength" ],
+            "slots": {
+                "password": None,
+            },
+            "handler": lambda user_input: logical_instance.checkapass(user_input)
+            },
         "png_to_pdf": (["png to pdf","change png to pdf", "transform png to pdf", "alter png to pdf", "turn png into pdf", "switch png to pdf"], logical_instance.png_to_pdf),
         "say_something": ([" "], logical_instance.typeSomething),
         "start_pomo": (["start pomo", "begin pomo", "start pomodoro", "begin pomodoro",], logical_instance.start_pomo),

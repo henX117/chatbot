@@ -15,40 +15,51 @@ class Chatbot(logical):
             self.introduction()
             while True:
                 command = input("").strip().lower()
-                intent = self.find_intent(command)
-                if intent == "huh":
-                    response = self.huh()
-                    print(response)
-                elif intent == "analyze":
-                    response = self.analyze_sentence()
-                    print(response)
-                elif intent == "weather":
-                    #print("Calling get_weather function...")
-                    #print("User input:", command)  # Print the user input
-                    #print("Matched intent:", intent)  # Print the matched intent
-                    slot_values = self.extract_slot_values(command, intent)
-                    filled_slots = self.fill_slots(intent, slot_values)
-                    #print("Filled slots for get_weather:", filled_slots)  # Print the filled_slots dictionary
-                    response = self.get_weather(filled_slots)
+                if command == "":
+                    response = self.typeSomething()
                     print(response)
                 else:
-                    try:
-                        intent_function = self.intents.get(intent, (None, None))[1]
-                        if asyncio.iscoroutinefunction(intent_function):
-                            response = asyncio.run(intent_function())
-                        else:
-                            response = intent_function()
+                    intent = self.find_intent(command)
+                    if intent == "huh":
+                        response = self.huh()
                         print(response)
-                    except subprocess.CalledProcessError as e:
-                        if e.returncode == 305:
-                            # Ignore the error and continue execution
-                            pass
-                        else:
-                            # Handle other exceptions or re-raise the exception
-                            raise
-                    except Exception as e:
-                        print(f"An error occurred: {str(e)}")
-                self.check_reminders()
+                    elif intent == "analyze":
+                        response = self.analyze_sentence()
+                        print(response)
+                    elif intent == "weather":
+                        slot_values = self.extract_slot_values(command, intent)
+                        filled_slots = self.fill_slots(intent, slot_values)
+                        response = self.get_weather(filled_slots)
+                        print(response)
+                    elif intent == "pass_check":
+                        try:
+                            response = self.checkapass(command)
+                            print(response)
+                        except Exception as e:
+                            print(f"An error occurred while checking password: {str(e)}")
+                    elif intent == "lottery":
+                        slot_values = self.extract_slot_values(command, intent)
+                        filled_slots = self.fill_slots(intent, slot_values)
+                        response = self.lottery(filled_slots.get("num_tickets", 1))
+                        print(response)
+                    else:
+                        try:
+                            intent_function = self.intents.get(intent, (None, None))[1]
+                            if asyncio.iscoroutinefunction(intent_function):
+                                response = asyncio.run(intent_function())
+                            else:
+                                response = intent_function()
+                            print(response)
+                        except subprocess.CalledProcessError as e:
+                            if e.returncode == 305:
+                                # Ignore the error and continue execution
+                                pass
+                            else:
+                                # Handle other exceptions or re-raise the exception
+                                raise
+                        except Exception as e:
+                            print(f"An error occurred: {str(e)}")
+                    self.check_reminders()
         except KeyboardInterrupt:
             print("\nExiting the chatbot. Goodbye!")
 
