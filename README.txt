@@ -2,7 +2,6 @@ README - Chatbot Project
 
 Description:
 This project is a chatbot named Hal (short for Halsey) implemented in Python. The chatbot utilizes natural language processing (NLP) and various APIs to provide a range of functionalities, including:
-- Answering questions and providing information
 - Opening and closing applications
 - Performing text analysis
 - Solving math problems
