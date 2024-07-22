@@ -1,4 +1,3 @@
-#inital setup
 import subprocess
 import sys
 import os
@@ -105,8 +104,7 @@ if wantallornah == '1':
         except Exception as e:
             print(f"An error occurred --> {e}")
         print("-------------------------------------------------------------------------")
-        print("You can now launch user_setup.py\n type anything to exit...")
-        adios = input("")
+        adios = input("Once Epochs are finished, type anything to exit...")
         quit()
     else:
         print("all finished! type anything to exit...")
@@ -205,21 +203,18 @@ elif wantallornah == '2':
         else:
             print("not installed")
         
+        spacy_manual = input("Type 1 to start the SpaCy training: ")
+        if spacy_manual == '1':
+            try:
+                training()
+                print("--training has started. Please wait for it to finish.--")
+            except Exception as e:
+                print(f"An error occurred --> {e}")
+        else:
+            print("all finished! type anything to exit...")
+            x = input("")
+            quit()
             
     except Exception as e:
         print(f"An error occurred --> {e}")
 
-    print("-------------------------")
-    print("Please type '1' to begin training the SpaCy model.")
-    iwantspacytraining = input()
-    if iwantspacytraining == '1':
-        try:
-            training()
-        except Exception as e:
-            print(f"An error occurred --> {e}")
-    print("-------------------------------------------------------------------------")
-    print("you can how launch user_setup.py")
-    print("Setup is complete! Please type anything to exit.")
-    print("type anything to exit...")
-    x = input("")
-    quit()

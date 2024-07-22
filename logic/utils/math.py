@@ -153,15 +153,19 @@ class MathHelper:
             solution = sp.solveset(expr, var, domain=sp.Reals)
 
             if isinstance(solution, sp.sets.EmptySet):
-                return "No solution found."
+                return "No solution found. The equation has no real solutions."
             elif isinstance(solution, sp.sets.FiniteSet):
                 return f"The solution is: {', '.join(str(sol) for sol in solution)}"
             elif isinstance(solution, sp.sets.Interval):
                 return f"The solution is in the interval: {solution}"
             else:
-                return "Unable to determine the type of solution... Try another method?"
-        except sp.SympifyError:
-            return "Invalid equation."
+                return f"The solution is: {solution}"
+        except sp.SympifyError as e:
+            return f"Invalid equation: {str(e)}. Please check your input and try again."
+        except ValueError as e:
+            return f"Error in solving the equation: {str(e)}"
+        except Exception as e:
+            return f"An unexpected error occurred: {str(e)}"
 
     def summation(self, expression, lower_limit, upper_limit, variable):
         expression = re.sub(r'(\d)([a-zA-Z])', r'\1*\2', expression)

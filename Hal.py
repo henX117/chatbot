@@ -50,15 +50,18 @@ class Chatbot(logical):
                             else:
                                 response = intent_function()
                             print(response)
+                        except AttributeError:
+                            print(f"Error: The intent '{intent}' is not implemented/recognized.")
+                        except asyncio.TimeoutError:
+                            print("The operation timed out.")
                         except subprocess.CalledProcessError as e:
                             if e.returncode == 305:
-                                # Ignore the error and continue execution
-                                pass
+                                print("--An error occurred, but everything is fine.--")
                             else:
-                                # Handle other exceptions or re-raise the exception
-                                raise
+                                print(f"subprocess error: {str(e)}")
                         except Exception as e:
                             print(f"An error occurred: {str(e)}")
+                            print("If this error persists, please post your log file on the GitHub page.\n https://github.com/henX117/chatbot")
                     self.check_reminders()
         except KeyboardInterrupt:
             print("\nExiting the chatbot. Goodbye!")

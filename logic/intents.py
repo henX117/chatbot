@@ -166,10 +166,18 @@ class logical:
                             data = await response.json()
                             image_url = data["output"][0]["url"]
                             return image_url
+                        elif response.status == 401:
+                            return self.speak_and_return("Invalid API key. Please check the API key and try again.")
+                        elif response.status == 429:
+                            return self.speak_and_return("API rate limit exceeded. Please try again later.")
                         else:
-                            raise Exception(f"API request failed with status code {response.status}")
+                            return (f"API request failed with status code {response.status}")
+            except aiohttp.ClientError as e:
+                return (f"Network error occurred: {str(e)}")
+            except asyncio.TimeoutError:
+                return self.speak_and_return("The API request timed out. Please try again later.")
             except Exception as e:
-                return self.speak_and_return(f"An error occurred: {e}")
+                return self.speak_and_return(f"An unexpected error occurred: {e}")
 
     def morningornah(self):
         current_time = datetime.now()
@@ -255,14 +263,17 @@ class logical:
 
     def closeapp(self):
         self.speaker.speak(f"What app do you want to close {self.name}")
-        command = input(f"What app do you want to close, {self.name}?")
+        command = input(f"What app do you want to close, {self.name}?\n")
         try:
             from AppOpener import close
-            print(f"attempting to close{command}")
+            print(f"attempting to close {command}...")
             close(command)
             return""
         except RuntimeError:
             return self.speak_and_return(f"{command} does not want to cooperate and close. try again??")
+        except Exception as e:
+            print(f"Error trying to close {command}: {str(e)}")
+            return ""
 
     def analyze_sentence(self):
         self.speaker.speak("Please enter the text that you want to analyze:")
@@ -287,12 +298,13 @@ class logical:
                 self.speaker.speak("Do you want a large analysis or small analysis?")
                 which_nlp = input("Which analysis do you want? 'small' or 'large'?\n").strip().lower()
             
-                if which_nlp == 'small':
+                if which_nlp == 'small' or which_nlp == '1':
                     nlp = spacy.load("en_core_web_sm")
-                elif which_nlp == 'large':
+                elif which_nlp == 'large' or which_nlp == '2':
                     nlp = spacy.load("en_core_web_lg")
                 else:
-                    return self.speak_and_return("Invalid analysis option. Please choose 'small' or 'large'.")
+                    self.speak_and_return("Invalid analysis option.. I'm going to go with a small analysis for you.")
+                    nlp = spacy.load("en_core_web_sm")
             
                 doc = nlp(command)
                 sentences = list(doc.sents)
@@ -319,9 +331,19 @@ class logical:
                 webbrowser.open(output_path)
             
                 return "Visualization analysis completed."
-        
-            except (ValueError, KeyError, SyntaxError):
-                self.speak_and_return("Something went wrong with the analysis. Please try again.")
+
+            except ValueError as V:
+                self.speak_and_return("A value error occurred.")
+                print(V)
+            
+            except KeyError as K:
+                self.speak_and_return("A key error occurred.")
+                print(K)
+            
+            except SyntaxError as S:
+                self.speak_and_return("A syntax error occurred.")
+                print(S)
+            
         elif which_analysis == '3':
             return self.main()
         else:
@@ -458,7 +480,6 @@ class logical:
         if not operation:
             return self.speak_and_return("Unsupported math operation")
 
-    # ...
     def thanks(self):
         thank_responses = [
             f"You're welcome, {self.name}! Happy to help.",
@@ -493,8 +514,8 @@ class logical:
         }
 
         try:
-            response = requests.get(base_url, params=params)
-            response.raise_for_status()  # Raise an exception for 4xx or 5xx status codes
+            response = requests.get(base_url, params=params, timeout=10)
+            response.raise_for_status() 
             data = response.json()
 
             if 'success' in data and data['success'] is False:
@@ -518,6 +539,15 @@ class logical:
                 print(error_message)
                 return self.speak_and_return(error_message)
 
+        except requests.Timeout:
+            return self.speak_and_return("The weather service is taking too long to respond. Please try again later.")
+        
+        except requests.HTTPError as http_err:
+            if response.status_code == 401:
+                error_message = "Invalid API key. Please check the API key and try again."
+            else:
+                error_message = f"HTTP error occurred: {http_err}"
+        
         except requests.exceptions.RequestException as e:
             import traceback
             print(traceback.format_exc())
@@ -596,7 +626,7 @@ class logical:
         release = platform.release()
         return self.speak_and_return(f"{os_name} {release} Version {version}")
 
-    def oopsies(self): #lets build up this function.
+    def oopsies(self): 
         return self.speak_and_return("its okay, no worries.")
 
     def ifeelgood(self):
@@ -677,6 +707,7 @@ class logical:
             return self.speaker.speak(f"Alright, {self.name} you are sounding a little angry.")
         else:
             return f"Alright, {self.name}, you're sounding a little angry.."
+    
     def copy(self):
         responses1 = [
             f"alright, {self.name}. I'll copy the next thing you say.",
@@ -803,30 +834,30 @@ class logical:
                 print("-----------------------------")
 
     def png_to_pdf(self):
-        from .pdfs.pdfconverter import PNGToPDFConverter
-        png_directory = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "PLACE_PDFs_HERE")
-        png_paths = []
-        
-        print("Enter the names of the PNG files (without extension) you want to convert (or press Enter to finish):")
-        while True:
-            png_name = input().strip()
-            if png_name == "":
-                break
-            png_path = os.path.join(png_directory, f"{png_name}.png")
-            if os.path.exists(png_path):
-                png_paths.append(png_path)
-                print(f"File '{png_name}.png' added for conversion.")
-            else:
-                print(f"File '{png_name}.png' not found in the 'PLACE_PDFs_HERE' folder.")
-        
-        if len(png_paths) == 0:
-            return self.speak_and_return("No valid PNG files were provided.")
-        
-        output_filename = "output.pdf"
-        output_path = os.path.join(png_directory, output_filename)
-        
-        converter = PNGToPDFConverter()
         try:
+            from .pdfs.pdfconverter import PNGToPDFConverter
+            png_directory = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "PLACE_PDFs_HERE")
+            png_paths = []
+            
+            print("Enter the names of the PNG files (without extension) you want to convert (or press Enter to finish):")
+            while True:
+                png_name = input().strip()
+                if png_name == "":
+                    break
+                png_path = os.path.join(png_directory, f"{png_name}.png")
+                if os.path.exists(png_path):
+                    png_paths.append(png_path)
+                    print(f"File '{png_name}.png' added for conversion.")
+                else:
+                    print(f"File '{png_name}.png' not found in the 'PLACE_PDFs_HERE' folder.")
+            
+            if len(png_paths) == 0:
+                return self.speak_and_return("No valid PNG files were provided.")
+            
+            output_filename = "output.pdf"
+            output_path = os.path.join(png_directory, output_filename)
+            
+            converter = PNGToPDFConverter()
             success = converter.convert(png_paths, output_path)
             if success:
                 print(f"PNG to PDF conversion completed successfully. Output file: {output_path}")
@@ -834,9 +865,12 @@ class logical:
             else:
                 print("An error occurred during PNG to PDF conversion.")
                 return self.speak_and_return("An error occurred during PNG to PDF conversion.")
+        except FileNotFoundError as e:
+            return self.speak_and_return(f"File not found: {e}")
+        except PermissionError:
+            return self.speak_and_return("Permission denied. Please check file permissions.")
         except Exception as e:
-            print(f"An error occurred during PNG to PDF conversion: {str(e)}")
-            return self.speak_and_return("An error occurred during PNG to PDF conversion.")
+            return self.speak_and_return(f"An unexpected error occurred during PNG to PDF conversion: {str(e)}")
 
     def checkapass(self, user_input):
         #print("checkapass intent function started...")
@@ -896,6 +930,12 @@ class logical:
                 return self.speak_and_return("Files have been merged successfully!\nWhat's next?")
             else:
                 return self.speak_and_return("The merged PDF could not be found.")
+        except FileNotFoundError:
+            return self.speak_and_return("No PDF files were found in the 'PLACE_PDFs_HERE' folder.")
+        except PermissionError:
+            return self.speak_and_return("Permission denied. Please check file permissions.")
+        except subprocess.CalledProcessError:
+            return self.speak_and_return("An error occurred while opening the merged PDF.")
         except Exception as e:
             return self.speak_and_return(f"An error occurred while merging PDFs: {e}")
 
@@ -964,8 +1004,10 @@ class logical:
             return f"There are multiple results for '{query}'. Did you mean one of these?\n{','.join(options)}"
         except wikipedia.exceptions.PageError:
             return f"sorry, I couldn't find a Wikipedia page for {query}"
+    
     def news(self):
-        return self.speak_and_return("I'm sorry, I can't fetch the news right now. Please try again later.")
+        return self.speak_and_return("This feature is not available yet.")
+    
     def huh(self):
         responses = [
             "I'm sorry what now?",
@@ -984,6 +1026,9 @@ class logical:
         ]
         randomresp = random.choice(responses)
         return self.speak_and_return (randomresp)
+    
+    def checkapikeys(self):
+        return self.speak_and_return("This feature is not available yet.")
     
     def find_intent(self, user_input):
         if user_input.strip() == " ":
@@ -1038,6 +1083,7 @@ class logical:
                 slot_values["num_tickets"] = 1
 
         return slot_values
+    
     def fill_slots(self, intent, slot_values):
         #print("Filling slots for intent:", intent)
         #print("Slot values:", slot_values)
@@ -1134,5 +1180,6 @@ def get_intents(logical_instance):
         "say_something": ([" "], logical_instance.typeSomething),
         "start_pomo": (["start pomo", "begin pomo", "start pomodoro", "begin pomodoro",], logical_instance.start_pomo),
         "stop_pomo": (["stop pomo", "end pomo", "stop pomodoro", "end pomodoro",], logical_instance.stop_pomo),
+        "checkapikeys": (["check api keys", "verify api keys", "validate api keys", "confirm api keys", "test api keys"], logical_instance.checkapikeys),
 }
     return intents

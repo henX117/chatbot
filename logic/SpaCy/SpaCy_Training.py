@@ -56,7 +56,7 @@ accuracies = []
 losses = []
 
 optimizer = nlp.begin_training()
-for i in range(10):
+for i in range(10): # 10 epochs is normal. Higher = more accurate but longer training. Lower = less accurate but faster training
     epoch_losses = {}
     batches = minibatch(train_data, size=compounding(32.0, 128.0, 1.001))
     for batch in batches:
@@ -77,6 +77,9 @@ model_dir = current_dir
 nlp.to_disk(model_dir)
 print("Officially trained the model!")
 print("graphing the models accuracy and loss...")
+print("-----")
+print("file can be closed now!")
+print("-----")
 plt.figure(figsize=(12, 6))
 
 plt.subplot(1, 2, 1)
