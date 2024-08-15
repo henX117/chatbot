@@ -14,6 +14,7 @@ import threading
 import time
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 warnings.filterwarnings("ignore")
+import string
 from AppOpener import open as open_app
 from gtts import gTTS
 import sys
@@ -100,6 +101,7 @@ class logical:
             "start pomodoro": "starts a pomodoro timer",
             "stop pomodoro": "stops the pomodoro timer",
             "api key": f"weather api key: {WEATHER_API_KEY}",
+            "cypher": "encrypts and decrypts text using a cypher",
         }
     def preprocess_intent_templates(self):
         intent_templates = {}
@@ -1107,6 +1109,48 @@ class logical:
         #print("Final filled_slots:", filled_slots)
         return filled_slots
 
+    def Cypher(self):
+        from logic.utils.Cipher import Cipher
+        cipher_instance = Cipher()
+
+        while True:
+            choice = input("Do you want to (1) generate a random cipher or (2) input your own? (Enter 1 or 2): ").strip()
+            if choice == '1':
+                cipher_instance.generate_random_cipher()
+                print("Generated Cipher: ", ''.join(cipher_instance.cipher_map[k] for k in string.ascii_uppercase))
+                break
+            elif choice == '2':
+                custom_key = input("Enter a 26-character key (A-Z only, no duplicates): ").upper()
+                try:
+                    cipher_instance.set_custom_cipher(custom_key)
+                    print("Custom Cipher Set.")
+                    break
+                except ValueError as e:
+                    print(e)
+            else:
+                print("Invalid choice, please enter 1 or 2.")
+
+        while True:
+            operation = input("Do you want to (1) encrypt or (2) decrypt a message? (Enter 1 or 2): ").strip()
+            if operation == '1':
+                text = input("Enter the plaintext: ")
+                encrypted = cipher_instance.cipher_text(text)
+                print("Ciphertext:", encrypted)
+            elif operation == '2':
+                text = input("Enter the ciphertext: ")
+                decrypted = cipher_instance.decipher_text(text)
+                print("Decrypted text:", decrypted)
+            else:
+                print("Invalid choice, please enter 1 or 2.")
+                continue
+
+            another = input("Do you want to perform another operation? (yes/no): ").strip().lower()
+            if another != 'yes':
+                break
+
+
+    
+
 def get_intents(logical_instance):
     intents = {
         "cls": (["clear screen", "reset screen", "wipe screen", "erase screen", "empty screen","clear the screen","reset the screen","erase the screen","empty screen","cls"], logical_instance.cls),
@@ -1181,5 +1225,6 @@ def get_intents(logical_instance):
         "start_pomo": (["start pomo", "begin pomo", "start pomodoro", "begin pomodoro",], logical_instance.start_pomo),
         "stop_pomo": (["stop pomo", "end pomo", "stop pomodoro", "end pomodoro",], logical_instance.stop_pomo),
         "checkapikeys": (["check api keys", "verify api keys", "validate api keys", "confirm api keys", "test api keys"], logical_instance.checkapikeys),
+        "Cypher": (["cypher", "generate cypher","encript"], logical_instance.Cypher)
 }
     return intents
