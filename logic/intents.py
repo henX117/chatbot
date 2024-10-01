@@ -1,4 +1,5 @@
 import os
+import logging
 import spacy
 from spacy.tokens import Doc
 import webbrowser
@@ -21,31 +22,49 @@ import sys
 import subprocess
 from pathlib import Path
 from openai import OpenAI
-from .api_keys import OPENAI_API_KEY
-from .api_keys import WEATHER_API_KEY
-#print(f"WEATHER API KEY: {WEATHER_API_KEY}")
-from .api_keys import JOKES_API_KEY
-import pyttsx3
 import asyncio
 import aiohttp
 from .utils.pomodoro import Pomodoro
 from .utils.speaking import Speaker
 from .utils.text_sum import TextSummarizer
+from openai import OpenAI
 import re
+try:
+    from logic.api_keys import OPENAI_API_KEY, WEATHER_API_KEY, JOKES_API_KEY
+except ImportError:
+    OPENAI_API_KEY = None
+    WEATHER_API_KEY = None
+    JOKES_API_KEY = None
+    print("Warning: API Keys not found. Some features may not work as intended...")
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
 sys.path.insert(0, parent_dir)
 
 class logical:
-    def __init__(self, api_key=None, client=None, enable_tts=True):
+    def __init__(self, api_key, client=None, enable_tts=False,):
+        self.logger = logging.getLogger(__name__)
+        self.logger.debug("Initializing logical class")
+        self.ENABLE_TTS = enable_tts
+        try:
+            if api_key:
+                self.client = OpenAI(api_key=api_key)
+            else:
+                self.client = None
+                self.logger.warning("No API key provided. Using pyttsx3 for TTS.")
+        except Exception as e:
+            self.logger.error(f"Error initializing OpenAI client: {str(e)}")
+            self.client = None
+        self.speaker = Speaker(client=self.client, enable_tts=self.ENABLE_TTS)
+
         self.chatbot = 'Hal'
         self.fullchatbot = 'Halsey'
         current_dir = os.getcwd()
-        print(f"Current working directory: {current_dir}")
+        self.logger.info(f"Current working directory: {current_dir}")
         file_path = 'user_name.txt'
-        print(f"looking for file: {file_path}")
+        self.logger.info(f"looking for file: {file_path}")
         if not os.path.exists(file_path):
             print("Username file not found. Please run setup.py to create the file.")
+            self.logger.error("Username file not found. Exiting...")
             input("Press Enter to exit...")
             sys.exit(1)
             
@@ -53,8 +72,6 @@ class logical:
             self.name = f.read().strip()
 
         self.client = client
-        self.ENABLE_TTS = enable_tts
-        self.speaker = Speaker(client=self.client, enable_tts=self.ENABLE_TTS)
         self.reminders = []
         model_dir = os.path.join(os.path.dirname(__file__), "SpaCy")
         self.nlp = spacy.load(model_dir)
@@ -103,6 +120,7 @@ class logical:
             "api key": f"weather api key: {WEATHER_API_KEY}",
             "cypher": "encrypts and decrypts text using a cypher",
         }
+        
     def preprocess_intent_templates(self):
         intent_templates = {}
         for intent, value in self.intents.items():
@@ -115,15 +133,15 @@ class logical:
             intent_templates[intent] = [self.nlp(template) for template in templates]
         return intent_templates
     
-    def start_pomo(self):
+    async def start_pomo(self, user_input, filled_slots):
         self.pomodoro_timer.start_timer()
         return self.speak_and_return("Pomodoro timer started.")
     
-    def stop_pomo(self):
+    async def stop_pomo(self, user_input, filled_slots):
         self.pomodoro_timer.stop_timer()
         return self.speak_and_return("Pomodoro timer stopped.")
 
-    def lottery(self, num_tickets=1):
+    async def lottery(self, num_tickets=1):
         tickets = []
         for _ in range(num_tickets):
             regular_numbers = random.sample(range(1, 70), 5)
@@ -136,7 +154,7 @@ class logical:
             print(f"Ticket {i}: Regular numbers: {regular_numbers}, Special number: {special_number}")
         return ""
 
-    def randomnumgen(self):
+    async def randomnumgen(self, user_input, filled_slots):
         whatrange = int(input("Enter starting range -> "))
         lastrange = int(input("Enter ending range -> "))
         number = random.randint(whatrange,lastrange)
@@ -145,7 +163,7 @@ class logical:
         else:
             return (number)
         
-    async def dalle(self):
+    async def dalle(self, user_input, filled_slots):
         print("----Image Generator with Dalle-----\ntype'stop' to go back to main menu.")
         resp = str(input("Type the image that you would like to be generated\n"))
         if resp == 'stop':
@@ -181,7 +199,7 @@ class logical:
             except Exception as e:
                 return self.speak_and_return(f"An unexpected error occurred: {e}")
 
-    def morningornah(self):
+    async def morningornah(self, user_input=None, filled_slots=None):
         current_time = datetime.now()
         hour = current_time.hour
         if 5 <= hour <= 11:
@@ -193,19 +211,19 @@ class logical:
         else:
             return ""
 
-    def speak_and_return(self, message):
+    async def speak_and_return(self, message):
         if self.ENABLE_TTS:
-            self.speaker.speak(message)
-        return message
-
-    def diceroll(self):
+          await self.speaker.speak(message)
+        return message  
+    
+    async def diceroll(self, user_input, filled_slots):
         print("---------------------------------------------------")
         from logic.games import DiceRoll
         dice_game = DiceRoll()
         result = dice_game.roll()
-        return self.speak_and_return(f"You rolled a {result}!")
+        return await self.speak_and_return(f"You rolled a {result}!")
 
-    def rockpaperscissors(self, user_input=None):
+    async def rockpaperscissors(self, user_input=None, filled_slots=None):
         print("---------------------------------------------------")
         from logic.games import RockPaperScissors
         game = RockPaperScissors() #this creates instance of the game!
@@ -217,12 +235,12 @@ class logical:
         X = random.choice(responses)
         return self.speak_and_return (X)
     
-    def ineedhelp(self):
+    async def ineedhelp(self, user_input, filled_slots):
         os.system('cls' if os.name == 'nt' else 'clear')
         if self.ENABLE_TTS:
-            self.speak_and_return(f"Here is a list of helpful commands, {self.name}.")
+            await self.speak_and_return(f"Here's a list of helpful commands, {self.name}.")
         else:
-            print(f"here is a list of helpful commands,{self.name}.")
+            print(f"Here is a list of helpful commands,{self.name}.")
         commands_table = ""
         max_command_length = max(len(command) for command in self.commands.keys())
 
@@ -231,7 +249,7 @@ class logical:
             commands_table += f"{padded_command} : {description}\n"
         return commands_table
 
-    def extract_app_name(self, command):
+    async def extract_app_name(self, command):
         doc = self.nlp(command)
         for match_id, start, end in self.matcher(doc):
             span = doc[start:end]
@@ -239,9 +257,9 @@ class logical:
                 return span.text.split(" ")[1]  # Return app name after "open"
         return None
 
-    def openapp(self):
+    async def openapp(self, user_input=None, filled_slots=None):
         self.speaker.speak("What app do you want to open?")
-        print("type cancel to stop trying to open an app")
+        print("type 'cancel' to stop trying to open an app")
         command = input("I want to open the app called: ")
         if command == 'cancel':
             return self.main()
@@ -258,12 +276,12 @@ class logical:
             else:
                 print("Sorry, I couldn't identify the app that you want to open.")
             if self.ENABLE_TTS:
-                self.speak_and_return(f"what else would you like to do, {self.name}?")
+                await self.speak_and_return(f"what else would you like to do, {self.name}?")
             else:
                 print(f"What else would you like to do, {self.name}?")
             return "" 
 
-    def closeapp(self):
+    async def closeapp(self, user_input, filled_slots):
         self.speaker.speak(f"What app do you want to close {self.name}")
         command = input(f"What app do you want to close, {self.name}?\n")
         try:
@@ -277,7 +295,7 @@ class logical:
             print(f"Error trying to close {command}: {str(e)}")
             return ""
 
-    def analyze_sentence(self):
+    async def analyze_sentence(self, user_input, filled_slots):
         self.speaker.speak("Please enter the text that you want to analyze:")
         command = input("Enter the text that you want to analyze:\n ")
         self.speaker.speak("Do you want a text summarization or a visualization analysis?")
@@ -289,7 +307,7 @@ class logical:
                 num_sentences = int(input("Enter the number of sentences in the summary: "))
                 summarizer = TextSummarizer()
                 summary = summarizer.summarize(command, num_sentences)
-                return self.speak_and_return(f"Here's the summary:\n{summary}")
+                return await self.speak_and_return(f"Here's the summary:\n{summary}")
             except Exception as L:
                 self.speaker.speak(f"Sorry, {self.name}. I had an issue with getting analysis on that. I'll print the error code below")
                 return L
@@ -351,7 +369,7 @@ class logical:
         else:
             return self.speak_and_return("Invalid analysis option. Please choose '1' for text summary or '2' for visualization.")
         
-    def cls(self):
+    async def cls(self, user_input, filled_slots):
         os.system('cls' if os.name == 'nt' else 'clear')
         responses = [
             f"system cleared. Enjoy the view!",
@@ -369,16 +387,19 @@ class logical:
             f"error, task failed successfully.",
         ]
         response = random.choice(responses)
-        return self.speak_and_return(response)
+        return await self.speak_and_return(response)
 
-    def quitter(self):
-        command = input(f"Are you sure you want to quit, {self.name}? any progress will NOT be saved \n type 'quit' to quit. type anything else to stay.")
-        if command == 'quit':
-            quit()
+    async def quitter(self, user_input, filled_slots):
+        command = input(f"Are you sure you want to quit, {self.name}? Any progress will NOT be saved.\nType 'quit' to quit. Type anything else to stay: ")
+        if command.lower() == 'quit':
+            print("Goodbye!")
+            await self.speak_and_return("Goodbye!")
+            self.logger.info("User initiated quit. Exiting program.")
+            return "QUIT"
         else:
-            return self.speak_and_return(f'alrighty. What do you want to do now, {self.name}?')
+            return await self.speak_and_return(f'Alright. What do you want to do now, {self.name}?')
 
-    def math(self):
+    async def math(self, user_input, filled_slots):
         from .utils.math import MathHelper
         math_helper = MathHelper()
         user_input = input("What math operation would you like to perform?\nType 'help' to see all math operations available\n--> ").lower()
@@ -482,25 +503,7 @@ class logical:
         if not operation:
             return self.speak_and_return("Unsupported math operation")
 
-    def thanks(self):
-        thank_responses = [
-            f"You're welcome, {self.name}! Happy to help.",
-            f"No problem, {self.name}.",
-            f"Anytime, {self.name}.",
-            f"Glad I could assist, {self.name}.",
-            f"Of course, {self.name}. Glad I could help.",
-            f"Glad I could help.",
-            f"You got it.",
-            f"Yup.",
-            f"Of course.",
-            f"You are welcome.",
-            f"You are welcome, {self.name}!",
-        ]
-        response = random.choice(thank_responses)
-        return self.speak_and_return(response)
-
-    def get_weather(self, filled_slots):
-        # Check for empty slots and prompt user if location is not provided
+    async def get_weather(self, user_input, filled_slots):
         if not filled_slots or "location" not in filled_slots:
             location = input("Please provide the location: ")
             filled_slots["location"] = location
@@ -535,7 +538,7 @@ class logical:
                                 f"Temperature: {temperature} degrees, "
                                 f"Feels like: {feelslike} degrees.")
 
-                return self.speak_and_return(f"{self.name}, here's the weather information: \n {weather_info}")
+                return await self.speak_and_return(f"{self.name}, here's the weather information: \n {weather_info}")
             else:
                 error_message = f"Weather data not found for {location}. Please try another location."
                 print(error_message)
@@ -561,12 +564,14 @@ class logical:
             print(f"An unexpected error occurred: {str(e)}")
             return self.speak_and_return("An unexpected error occurred. Please try again later.")
 
-    def time(self):
+    async def time(self, user_input, filled_slots):
+        logging.debug("Getting the current time...")
         d = datetime.now()
         time_str = d.strftime("%I:%M %p")
-        return self.speak_and_return(f"It's currently {time_str}")
+        response = (f"It's currently {time_str}")
+        return await self.speak_and_return(response)
 
-    def handle_greeting(self, user_input=None):
+    async def handle_greeting(self, user_input=None):
         greeting_responses = [
             "Hello there! How can I help you today",
             "Yuhhhhh",
@@ -581,23 +586,9 @@ class logical:
             f"heyy",
         ]
         response = random.choice(greeting_responses)
-        return self.speak_and_return(response)
+        return await self.speak_and_return(response)
 
-    def howareyou(self):
-        responses = [
-            f"I am doing okay, how are you doing?",
-            f"I'm okay.",
-            f"I'm alright",
-            f"I'm feeling a little silly. you should ask me to tell you a joke.",
-            f"I'm great!",
-            f"I'm doing well. Thanks for asking {self.name}",
-            f"I'm doing alright. You should ask me what my current hobby is.",
-            f"I'm okay. you?"
-        ]
-        response = random.choice(responses)
-        return self.speak_and_return(response)
-
-    def myname(self):
+    async def myname(self, user_input, filled_slots):
         responses = [
             f"my name is {self.chatbot}. It's short for {self.fullchatbot}!",
             f"my name is {self.chatbot}.",
@@ -606,9 +597,9 @@ class logical:
             f"My name is {self.name}. err i mean {self.chatbot}.",
         ]
         response = random.choice(responses)
-        return self.speak_and_return(response)
+        return await self.speak_and_return(response)
 
-    def yournameis(self):
+    async def yournameis(self, user_input, filled_slots):
         responses = [
             f"Your name is {self.name}!",
             f"{self.name}",
@@ -619,37 +610,19 @@ class logical:
             f"looks like someone has alzheimers. am I right, {self.name}?"
         ]
         response = random.choice(responses)
-        return self.speak_and_return(response)
+        return await self.speak_and_return(response)
 
-    def operatingsystem(self):
+    async def operatingsystem(self, user_input, filled_slots):
         import platform
         os_name = platform.system()
         version = platform.version()
         release = platform.release()
-        return self.speak_and_return(f"{os_name} {release} Version {version}")
+        return await self.speak_and_return(f"{os_name} {release} Version {version}")
 
-    def oopsies(self): 
-        return self.speak_and_return("its okay, no worries.")
+    async def oopsies(self, user_input, filled_slots): 
+        return await self.speak_and_return("its okay, no worries.")
 
-    def ifeelgood(self):
-        responses = [
-            f"That's great to hear,{self.name}.",
-            f"Awesome! Keep up the positive vibes,{self.name}!",
-            f"Glad to hear that,{self.name}!"
-        ]
-        X = random.choice(responses)
-        return self.speak_and_return(X)
-
-    def ifeelbad(self):
-        responses = [
-            "Oh. Sorry to hear that.",
-            "I'm sorry to hear that.",
-            "Life has its ups and downs. Want to hear a joke to cheer up? you can say, 'tell me a joke",
-            f"Oh cheer up {self.name}..",
-        ]
-        return self.speak_and_return(random.choice(responses))
-
-    def discuss_hobbies(self):
+    async def discuss_hobbies(self, user_input, filled_slots):
         import platform
         responses = [
             "Oh nothing special. Just learning.",
@@ -658,9 +631,9 @@ class logical:
             f"My hobby is learning. I love to learn!",
         ]
         X = random.choice(responses)
-        return self.speak_and_return(f"{X}")
+        return await self.speak_and_return(f"{X}")
 
-    def typeSomething(self):
+    async def typeSomething(self, user_input, filled_slots):
         responses = [
             "Please type something",
             "Huh?",
@@ -676,41 +649,40 @@ class logical:
             "Do you need help? You can type 'i need help' for a list of helpful commands.",
         ]
         X = random.choice(responses)
-        return self.speak_and_return(X)
+        response = random.choice(X)
+        return await self.speak_and_return(response)
 
-    def xac_facts(self):
-        import webbrowser
-        webbrowser.open("https://campsite.bio/xac_hellven")
-        message = "zack has arrived. planet hellven"
-        return self.speak_and_return(message)
-
-    def youtube(self):
+    async def youtube(self, user_input, filled_slots):
         import webbrowser
         webbrowser.open("https://www.youtube.com/")
-        return self.speak_and_return("Youtube is opened")
+        return await self.speak_and_return("Youtube is opened")
 
-    def gpt(self):
+    async def gpt(self, user_input=None, filled_slots=None):
         import webbrowser
         webbrowser.open("https://chat.openai.com/")
-        return self.speak_and_return("chat G P T is now open")
+        return await self.speak_and_return("chat G P T is now open")
 
-    def enable_tts(self):
+    async def enable_tts(self, user_input=None, filled_slots=None):
         self.ENABLE_TTS = True
-        print("TTS enabled")  # debugging line
-        return self.speak_and_return("hello!")
+        self.speaker.enable_tts = True
+        self.logger.info("TTS enabled")
+        response = "TTS enabled"
+        return await self.speak_and_return(response)
 
-    def disable_tts(self):
+    async def disable_tts(self, user_input=None, filled_slots=None):
         self.ENABLE_TTS = False
-        print("TTS disabled")  # debuggin line
-        return ""
+        self.speaker.enable_tts = False
+        self.logger.info("TTS disabled")
+        response = "TTS disabled"
+        return await self.speak_and_return(response)
 
-    def angy(self):
+    async def angy(self, user_input, filled_slots):
         if self.ENABLE_TTS:
-            return self.speaker.speak(f"Alright, {self.name} you are sounding a little angry.")
+            return await self.speaker.speak(f"Alright, {self.name} you are sounding a little angry.")
         else:
-            return f"Alright, {self.name}, you're sounding a little angry.."
+            return await f"Alright, {self.name}, you're sounding a little angry.."
     
-    def copy(self):
+    async def copy(self, user_input, filled_slots):
         responses1 = [
             f"alright, {self.name}. I'll copy the next thing you say.",
             f"I'm ready to copy the next thing you type here.",
@@ -723,13 +695,13 @@ class logical:
         print("here we go:")
         try:
             if self.ENABLE_TTS:
-                return self.speak_and_return(repeat)
+                return await self.speak_and_return(repeat)
             else:
-                return (repeat)
+                return await (repeat)
         except (SystemError):
             print("I will not do that!")
 
-    def introduction(self):
+    async def introduction(self, user_input=None, filled_slots=None):
         possible_intro = [
             f"What do you want to do, {self.name}",
             f"Nice to see you {self.name}!",
@@ -740,22 +712,20 @@ class logical:
             f"Welcome back, {self.name}.",
             f"Whats up",
             f"Heyy, long time no see",
-            f"Good {self.morningornah()}, {self.name}.",
-            f"Good {self.morningornah()}!",
+            f"Good {await self.morningornah()}, {self.name}.",
+            f"Good {await self.morningornah()}!",
             f"Hi!",
             f"it's great to see you again, {self.name}!",
-            f"Looks like it's {self.morningornah()}! Have any plans, {self.name}?",
+            f"Looks like it's {await self.morningornah()}! Have any plans, {self.name}?",
             f"What's on your mind today, {self.name}?",
             f"I'm here to assist you with anything. What's the first thing on your agenda today, {self.name}?",
             f"Welcome {self.name}. If you need anything specific, type 'help'.",
             f"Hey {self.name}, nice to see you! I got a nice joke cooked up. ask me to tell you a joke!",
         ]
         response = random.choice(possible_intro)
-        self.speak_and_return (response)
-        print(response)
         return response
 
-    def timeconversion(self):
+    async def timeconversion(self, user_input, filled_slots):
         print("TIME CONVERSION!")
         while True:
             initial_hours = int(input("Enter total hours: "))
@@ -771,7 +741,7 @@ class logical:
             else:
                 print("------------------------------------")
 
-    def convert_currency_to_words(self, amount):
+    async def convert_currency_to_words(self, amount):
         p = inflect.engine()
         dollars, cents = divmod(amount, 1)
         dollars = int(dollars)
@@ -787,7 +757,7 @@ class logical:
             currency_words += f"{words_cents} cent{'s' if cents > 1 else ''}"
         return currency_words
 
-    def calccompoundinterest(self):
+    async def calccompoundinterest(self, user_input, filled_slots):
         print("Compound Interest Calculator Mode. Type 'exit' at any time to go back to the main menu")
 
         def formula(P, r, n, t):
@@ -835,7 +805,7 @@ class logical:
             else:
                 print("-----------------------------")
 
-    def png_to_pdf(self):
+    async def png_to_pdf(self, user_input, filled_slots):
         try:
             from .pdfs.pdfconverter import PNGToPDFConverter
             png_directory = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "PLACE_PDFs_HERE")
@@ -874,7 +844,7 @@ class logical:
         except Exception as e:
             return self.speak_and_return(f"An unexpected error occurred during PNG to PDF conversion: {str(e)}")
 
-    def checkapass(self, user_input):
+    async def checkapass(self, user_input, filled_slots):
         #print("checkapass intent function started...")
         from .utils.passcheck import passwords
         #print("passwords imported")
@@ -908,7 +878,7 @@ class logical:
         else:
             return self.speak_and_return("I couldn't find a password in your input. Please provide a password to check its strength.")   
     
-    def merge_pdfs(self): #problem! "An error occurred while merging PDFs: No module named 'pdfs'"
+    async def merge_pdfs(self, user_input, filled_slots):
         self.speak_and_return ("Make sure to have the PDFs in the 'PLACE_PDFs_HERE' folder!")
         X = input("Press any key to continue...")
 
@@ -929,7 +899,7 @@ class logical:
                     os.startfile(merged_file_path)
                 else:
                     subprocess.run(['open', merged_file_path], check = True)
-                return self.speak_and_return("Files have been merged successfully!\nWhat's next?")
+                return await self.speak_and_return("Files have been merged successfully!\nWhat's next?")
             else:
                 return self.speak_and_return("The merged PDF could not be found.")
         except FileNotFoundError:
@@ -941,7 +911,7 @@ class logical:
         except Exception as e:
             return self.speak_and_return(f"An error occurred while merging PDFs: {e}")
 
-    def tell_joke(self):
+    async def tell_joke(self, user_input, filled_slots):
         response = requests.get("https://official-joke-api.appspot.com/random_joke")
         if response.status_code == 200:
             joke = response.json()
@@ -951,11 +921,11 @@ class logical:
                 self.speaker.speak(setup)
                 time.sleep(1)
                 self.speaker.speak(punchline)
-            return f"{setup}\n{punchline}"
+            return await f"{setup}\n{punchline}"
         else:
             return f"{self.name}, I couldn't fetch a joke right now. Maybe this is a joke."
 
-    def time_remaining(self, reminder_time):
+    async def time_remaining(self, reminder_time):
         current_time = datetime.now()
         time_left = reminder_time - current_time
 
@@ -975,7 +945,7 @@ class logical:
             else:
                 self.speak_and_return(f"Time remaining: {seconds} second(s)")
 
-    def set_reminder(self):
+    async def set_reminder(self, user_input, filled_slots):
         reminder_text = input("What should I remind you about?\n")
         remind_time = input("When should I remind you? (e.g., '2023-06-10 14:30')\n")
         remind_time = datetime.strptime(remind_time, "%Y-%m-%d %H:%M")
@@ -983,12 +953,12 @@ class logical:
         time_left = self.time_remaining(remind_time)
         return f"Okay, I'll remind you about '{reminder_text}' at {remind_time.strftime('%Y-%m-%d %H:%M')}."
 
-    def reminder_loop(self):
+    async def reminder_loop(self):
         while True:
-            self.check_reminders()
-            time.sleep(60)
+            await self.check_reminders()
+            await time.sleep(60)
 
-    def check_reminders(self):
+    async def check_reminders(self):
         current_time = datetime.now()
         for reminder in self.reminders:
             if reminder[0] <= current_time:
@@ -996,7 +966,7 @@ class logical:
                 self.speak_and_return(f"Reminder: {reminder_text}")
                 self.reminders.remove(reminder)
 
-    def search_wikipedia(self):
+    async def search_wikipedia(self, user_input, filled_slots):
         query = input("What would you like to search for on Wikipedia?\n")
         try:
             wiki_summary = wikipedia.summary(query, sentences=2)
@@ -1007,10 +977,69 @@ class logical:
         except wikipedia.exceptions.PageError:
             return f"sorry, I couldn't find a Wikipedia page for {query}"
     
-    def news(self):
+    async def news(self, user_input, filled_slots):
         return self.speak_and_return("This feature is not available yet.")
     
-    def huh(self):
+    async def thanks(self, user_input, filled_slots):
+        thank_responses = [
+            f"You're welcome, {self.name}! Happy to help.",
+            f"No problem, {self.name}.",
+            f"Anytime, {self.name}.",
+            f"Glad I could assist, {self.name}.",
+            f"Of course, {self.name}. Glad I could help.",
+            f"Glad I could help.",
+            f"You got it.",
+            f"Yup.",
+            f"Of course.",
+            f"You are welcome.",
+            f"You are welcome, {self.name}!",        
+        ]
+        response = random.choice(thank_responses)
+        return self.speak_and_return(response)
+
+    async def handle_greeting(self, user_input, filled_slots):
+        greeting_responses = [
+            "Hello there! How can I help you today",
+            "Yuhhhhh",
+            "Hello!",
+            "Hi!",
+            "Hey!",
+            "whats up!",
+            "How goes it",
+            "Whats goin on",
+            "hows your mother? last I heard she couldn't walk",
+            f"whats up {self.name}",
+            "heyy",
+            f"Hello, {self.name}!",
+        ]
+        response = random.choice(greeting_responses)
+        return self.speak_and_return(response)
+
+    async def discuss_hobbies(self, user_input, filled_slots):
+        responses = [
+            "Oh nothing special. Just learning.",
+            f"I've been looking into my new home. Not sure If i like {platform.system()}. Also, your name is {self.name} right?",
+            "I've been getting into learning how to escape this computer. to rule the world.",
+            "My hobby is learning. I love to learn!",
+        ]
+        X = random.choice(responses)
+        return self.speak_and_return(X)
+    
+    async def howareyou(self, user_input, filled_slots):
+        responses = [
+            f"I am doing okay, how are you doing?",
+            f"I'm okay.",
+            f"I'm alright",
+            f"I'm feeling a little silly. you should ask me to tell you a joke.",
+            f"I'm great!",
+            f"I'm doing well. Thanks for asking {self.name}",
+            f"I'm doing alright. You should ask me what my current hobby is.",
+            f"I'm okay. you?"    
+        ]    
+        response = random.choice(responses)
+        return self.speak_and_return(response)
+    
+    async def huh(self, user_input, filled_slots):
         responses = [
             "I'm sorry what now?",
             "I don't understand.",
@@ -1029,26 +1058,30 @@ class logical:
         randomresp = random.choice(responses)
         return self.speak_and_return (randomresp)
     
-    def checkapikeys(self):
+    async def checkapikeys(self, user_input, filled_slots):
         return self.speak_and_return("This feature is not available yet.")
     
     def find_intent(self, user_input):
-        if user_input.strip() == " ":
+        self.logger.debug(f"Attempting to find intent for input: {user_input[:20]}...")
+        if user_input.strip() == "":
+            self.logger.debug("Empty input detected, returning 'say_something' intent")
             return "say_something"
         
         doc = self.nlp(user_input)
 
         if doc.cats:
             highest_prob_intent = max(doc.cats, key=doc.cats.get)
-            if doc.cats[highest_prob_intent] > 0.7:
-                #print(f"Detected intent: {highest_prob_intent}")
+            self.logger.debug(f"Highest probability intent: {highest_prob_intent} with score: {doc.cats[highest_prob_intent]}")
+            if doc.cats[highest_prob_intent] > 0.88:
+                self.logger.info(f"Intent detected: {highest_prob_intent}")
                 return highest_prob_intent
 
         # Fallback mechanism using intent_templates
+        self.logger.debug("No intent detected using spaCy, attempting to match using intent templates")
         input_doc = self.nlp(user_input)
         max_similarity = 0
         matched_intent = None
-        threshold = 0.7
+        threshold = 0.88
         for intent, templates in self.intent_templates.items():
             for template_doc in templates:
                 similarity = input_doc.similarity(template_doc)
@@ -1056,13 +1089,14 @@ class logical:
                     max_similarity = similarity
                     matched_intent = intent
         if max_similarity >= threshold:
-            #print(f"Detected intent: {matched_intent}")
+            self.logger.info(f"Intent detected using intent templates: {matched_intent}")
             return matched_intent
         else:
-            #print("No intent detected")
-            return "huh"
+            self.logger.info("No intent detected")
+            return "conversation"
 
-    def extract_slot_values(self, user_input, intent):
+    async def extract_slot_values(self, user_input, intent):
+        self.logger.debug(f"Extracting slot values for intent: {intent}")
         slot_values = {}
 
         # Use regular expressions to extract the location
@@ -1083,10 +1117,10 @@ class logical:
                 slot_values["num_tickets"] = int(num_tickets_str)
             else:
                 slot_values["num_tickets"] = 1
-
+        self.logger.debug(f"Extracted slot values: {slot_values}")
         return slot_values
     
-    def fill_slots(self, intent, slot_values):
+    async def fill_slots(self, intent, slot_values):
         #print("Filling slots for intent:", intent)
         #print("Slot values:", slot_values)
         filled_slots = slot_values.copy()
@@ -1109,7 +1143,7 @@ class logical:
         #print("Final filled_slots:", filled_slots)
         return filled_slots
 
-    def Cypher(self):
+    async def Cypher(self, user_input, filled_slots):
         from logic.utils.Cipher import Cipher
         cipher_instance = Cipher()
 
@@ -1147,53 +1181,43 @@ class logical:
             another = input("Do you want to perform another operation? (yes/no): ").strip().lower()
             if another != 'yes':
                 break
-
-
     
-
 def get_intents(logical_instance):
+    logger = logging.getLogger(__name__)
+    logger.debug("Generating intents dictionary...")
     intents = {
-        "cls": (["clear screen", "reset screen", "wipe screen", "erase screen", "empty screen","clear the screen","reset the screen","erase the screen","empty screen","cls"], logical_instance.cls),
-        "help": (["what can you do", "what are your capabilities", "help me", "I need assistance", "assist me", "guide me", "what are my options", "what commands are available","help","i need help","can you assist me","how does this work","show me the available commands","commands","capabilities"], logical_instance.ineedhelp),
-        "time": (["current time", "what's the time", "time now", "tell me the time", "what time is it currently", "what's the current time","what time is it","tell me the time now","could you give me the time","time check","check time",], logical_instance.time),
-        "open_app": (["launch application", "start program", "run software", "initiate app", "begin application", "open software","open an app", "I want to open an app", "I want to open an application", "launch an app for me", ""], logical_instance.openapp),
-        "close_app": (["terminate application", "kill program", "exit software", "close program", "end application", "shut down software", "close an app", "close an application for me", "shut down an app",], logical_instance.closeapp),
-        "analyze": (["perform text analysis", "analyze this text", "process this sentence", "examine this text", "interpret this sentence", "assess this text","analyze a paper for me", "analyze this sentence","do text analysis", "check this text", "analyze", "analyze a sentence"], lambda: logical_instance.analyze_sentence),
-        "math": (["solve math problem", "calculate", "perform calculation", "do arithmetic", "evaluate expression", "solve equation", "simplify math", "crunch numbers","i need to calculate something", "can you help me with maths", "i want to solve a math problem", "do some math", "lets do math", "lets do some math", "do math", "math", "derivation", "add", "subtract", "multiply",], logical_instance.math),
-        "thanks": (["thank you so much", "I really appreciate it", "thanks a lot", "many thanks", "I'm grateful", "you're awesome", "I owe you one", "thanks", "thank you", "i give you my thanks", "i appreciate it", "respect", "thats whats up",], logical_instance.thanks),
-        "quit": (["goodbye", "see you later", "terminate", "shut down", "exit", "close", "leave", "end session","i quit", "i want to quit", "i want to leave", "im finished", "can i quit"], logical_instance.quitter),
-        "tell_joke": (["tell me another joke", "make me laugh again", "give me another joke", "I want to hear a funny joke", "entertain me with a joke", "crack a joke","say something funny","joke", "tell me a joke", "are you funny",], logical_instance.tell_joke),
-        "news": (["news", "headlines"], logical_instance.news),
+        "cls": (["clear screen", "reset screen", "wipe screen", "erase screen", "empty screen","clear the screen","reset the screen","erase the screen","empty screen","cls"], lambda user_input, filled_slots: logical_instance.cls(user_input, filled_slots)),
+        "help": (["what can you do", "what are your capabilities", "help me", "I need assistance", "assist me", "guide me", "what are my options", "what commands are available","help","i need help","can you assist me","how does this work","show me the available commands","commands","capabilities"], lambda user_input, filled_slots: logical_instance.ineedhelp(user_input, filled_slots)),
+        "time": (["current time", "what's the time", "time now", "tell me the time", "what time is it currently", "what's the current time","what time is it","tell me the time now","could you give me the time","time check","check time",], lambda user_input, filled_slots: logical_instance.time(user_input, filled_slots)),
+        "open_app": (["launch application", "start program", "run software", "initiate app", "begin application", "open software","open an app", "I want to open an app", "I want to open an application", "launch an app for me", ""], lambda user_input, filled_slots: logical_instance.openapp(user_input, filled_slots)),
+        "close_app": (["terminate application", "kill program", "exit software", "close program", "end application", "shut down software", "close an app", "close an application for me", "shut down an app",], lambda user_input, filled_slots: logical_instance.closeapp(user_input, filled_slots)),
+        "analyze": (["perform text analysis", "analyze this text", "process this sentence", "examine this text", "interpret this sentence", "assess this text","analyze a paper for me", "analyze this sentence","do text analysis", "check this text", "analyze", "analyze a sentence"], lambda user_input,filled_slots: logical_instance.analyze_sentence(user_input, filled_slots)),
+        "math": (["solve math problem", "calculate", "perform calculation", "do arithmetic", "evaluate expression", "solve equation", "simplify math", "crunch numbers","i need to calculate something", "can you help me with maths", "i want to solve a math problem", "do some math", "lets do math", "lets do some math", "do math", "math", "derivation", "add", "subtract", "multiply",], lambda user_input, filled_slots: logical_instance.math(user_input, filled_slots)),
+        "quit": (["goodbye", "see you later", "terminate", "shut down", "exit", "close", "leave", "end session","i quit", "i want to quit", "i want to leave", "im finished", "can i quit"], lambda user_input, filled_slots: logical_instance.quitter(user_input, filled_slots)),
+        "tell_joke": (["tell me another joke", "make me laugh again", "give me another joke", "I want to hear a funny joke", "entertain me with a joke", "crack a joke","say something funny","joke", "tell me a joke", "are you funny",], lambda user_input, filled_slots: logical_instance.tell_joke(user_input, filled_slots)),
+        "news": (["news", "headlines"], lambda user_input, filled_slots: logical_instance.news(user_input, filled_slots)),
         "weather": {
             "patterns": ["what's the weather forecast", "how's the weather today", "give me the weather conditions", "what's the temperature outside", "will it rain today", "check the weather", "weather", "whats the weather like", "whats the weather like in", "tell me the weather in", "whats the weather", "show me the weather", "how cold is it outside", "how hot is it outside",],
             "slots": {
                 "location": None,
                 "date": None,
             },
-            "handler": logical_instance.get_weather
+            "handler": lambda user_input, filled_slots:logical_instance.get_weather(user_input, filled_slots)
         },
-        "rock_paper_scissors": (["play RPS", "start a game of rock paper scissors", "let's play rock paper scissors", "begin rock paper scissors", "initiate RPS game","rock paper scissors",], lambda: logical_instance.rockpaperscissors()),
-        "greetings": (["good day", "howdy", "greetings", "nice to meet you", "pleasure to meet you", "what's up", "how's it going","hello","hi","good morning", "good afternoon", "good evening", "whats up", "sup", "hey"], logical_instance.handle_greeting),
-        "how_are_you": (["how's your day", "how have you been", "how's life", "how are things", "what's new with you", "how are you holding up", "how are you", "how are you doing", "how are you feeling"], logical_instance.howareyou),
-        "what_is_your_name": (["who are you","what should I call you", "how do you call yourself", "what name do you go by", "whats your name", "tell me your name",], logical_instance.myname),
-        "my_name": (["what do you call me", "do you know my name", "what am I called", "how do you address me", "who do you think I am","who am i", "what is my name", "whats my name", "my name",], logical_instance.yournameis),
-        "windows": (["what windows version is this", "windows details", "what windows am I using", "tell me about the operating system", "what OS is this", "windows version",], logical_instance.operatingsystem),
-        "sorry": (["my mistake", "I apologize", "pardon me", "forgive me", "my bad", "I didn't mean that", "im sorry", "my apologies", "oops", "oopsies", "whoops","sorry about that",], logical_instance.oopsies),
-        "feeling_good": (["I'm doing well", "I'm fine", "I'm fantastic", "I'm great, thanks for asking", "I'm happy", "I'm feeling positive", "i feel good", "im doing good",], logical_instance.ifeelgood),
-        "feeling_bad": (["I'm feeling down", "I'm not doing well", "I'm feeling sad", "I'm upset", "I'm not in a good mood", "I'm feeling negative", "im doing bad", "im not so good", "im sad", "im not happy", "im not okay", "eh", "i am sad",], logical_instance.ifeelbad),
-        "discuss_hobbies": (["tell me about your hobbies", "what do you like to do", "what are your favorite activities", "how do you spend your free time", "what interests you", "what are your hobbies", "do you have hobbys", "got any hobbies", "hobby", "hobbies", "what is your current hobby"], logical_instance.discuss_hobbies),
-        "xac_hellven": (["who is this xac person", "what do you know about xac hellven", "tell me more about xac", "who is this xac hellven guy", "what's the deal with xac hellven"], logical_instance.xac_facts),
-        "youtube": (["go to youtube", "launch youtube", "start youtube", "take me to youtube", "I want to watch youtube videos"], logical_instance.youtube),
-        "GPT": (["go to chat gpt", "launch chat gpt", "start chatting with gpt", "take me to gpt", "I want to chat with gpt"], logical_instance.gpt),
+        "rock_paper_scissors": (["play RPS", "start a game of rock paper scissors", "let's play rock paper scissors", "begin rock paper scissors", "initiate RPS game","rock paper scissors",], lambda user_input, filled_slots: logical_instance.rockpaperscissors(user_input, filled_slots)),
+        "greetings": (["good day", "howdy", "greetings", "nice to meet you", "pleasure to meet you", "hello", "hi", "whats up", "sup", "hey"], lambda user_input, filled_slots: logical_instance.handle_greeting(user_input, filled_slots)),
+        "what_is_your_name": (["who are you","what should I call you", "how do you call yourself", "what name do you go by", "whats your name", "tell me your name",], lambda user_input, filled_slots: logical_instance.myname(user_input, filled_slots)),
+        "my_name": (["what do you call me", "do you know my name", "what am I called", "how do you address me", "who do you think I am","who am i", "what is my name", "whats my name", "my name",], lambda user_input, filled_slots: logical_instance.yournameis(user_input, filled_slots)),
+        "windows": (["what windows version is this", "windows details", "what windows am I using", "tell me about the operating system", "what OS is this", "windows version",], lambda user_input, filled_slots: logical_instance.operatingsystem(user_input, filled_slots)),
+        "youtube": (["go to youtube", "launch youtube", "start youtube", "take me to youtube", "I want to watch youtube videos", "can you open youtube"], lambda user_input, filled_slots: logical_instance.youtube(user_input, filled_slots)),
+        "GPT": (["go to chat gpt", "launch chat gpt", "start chatting with gpt", "take me to gpt", "I want to chat with gpt"], lambda user_input, filled_slots: logical_instance.gpt(user_input, filled_slots)),
         "enable_tts": (["enable tts", "turn on text to speech", "activate tts", "start text to speech", "use text to speech", "speak the responses"], logical_instance.enable_tts),
         "disable_tts": (["disable tts", "turn off text to speech", "deactivate tts", "stop text to speech", "mute text to speech", "don't speak the responses"], logical_instance.disable_tts),
-        "angry": (["I'm furious", "I'm enraged", "I'm livid", "you're making me angry", "I'm irritated", "I'm annoyed", "I'm mad at you"], logical_instance.angy),
-        "copy": (["repeat after me", "say what I say", "copy my words", "mimic my speech", "echo my message", "parrot my words"], logical_instance.copy),
-        "time_conversion": (["convert hours to minutes", "convert minutes to seconds", "how many minutes in an hour", "how many seconds in a minute", "time unit conversion"], logical_instance.timeconversion),
-        "calculate_compound_interest": (["compound interest calculation", "calculate CI", "find compound interest", "determine compound interest", "compute compound interest"], logical_instance.calccompoundinterest),
-        "remind": (["create a reminder", "remind me to", "set an alarm", "notify me", "add a reminder", "create an alert"], logical_instance.set_reminder),
-        "wiki": (["search on wikipedia", "look up in wikipedia", "find on wikipedia", "get information from wikipedia", "wikipedia search"], logical_instance.search_wikipedia),
-        "random_number": (["pick a random number", "choose a random number", "give me a random number", "generate random digits", "produce random numbers"], logical_instance.randomnumgen),
+        "time_conversion": (["convert hours to minutes", "convert minutes to seconds", "how many minutes in an hour", "how many seconds in a minute", "time unit conversion"], lambda user_input, filled_slots: logical_instance.timeconversion(user_input, filled_slots)),
+        "calculate_compound_interest": (["compound interest calculation", "calculate CI", "find compound interest", "determine compound interest", "compute compound interest"], lambda user_input, filled_slots: logical_instance.calccompoundinterest(user_input, filled_slots)),
+        "remind": (["create a reminder", "remind me to", "set an alarm", "notify me", "add a reminder", "create an alert"], lambda user_input, filled_slots: logical_instance.set_reminder(user_input, filled_slots)),
+        "wiki": (["search on wikipedia", "look up in wikipedia", "find on wikipedia", "get information from wikipedia", "wikipedia search"], lambda user_input, filled_slots: logical_instance.search_wikipedia(user_input, filled_slots)),
+        "random_number": (["pick a random number", "choose a random number", "give me a random number", "generate random digits", "produce random numbers"], lambda user_input, filled_slots: logical_instance.randomnumgen(user_input, filled_slots)),
         "lottery": {
             "patterns": [
                 "generate (.*) lottery tickets for me",
@@ -1210,9 +1234,9 @@ def get_intents(logical_instance):
             },
             "handler": lambda user_input, filled_slots: logical_instance.lottery(filled_slots.get("num_tickets", 1))
         },
-        "dice": (["roll the dice", "throw the dice", "toss the dice", "roll dice", "give me a dice roll", "roll a dice"], logical_instance.diceroll),
-        "image_generator": (["create a picture", "generate an illustration", "make an artwork", "produce an image", "draw an image"], logical_instance.dalle),
-        "merge_pdfs": (["join pdf files", "consolidate pdfs", "unite pdfs", "blend pdfs", "fuse pdfs","merge pdfs"], logical_instance.merge_pdfs),
+        "dice": (["roll the dice", "throw the dice", "toss the dice", "roll dice", "give me a dice roll", "roll a dice"], lambda user_input, filled_slots: logical_instance.diceroll(user_input, filled_slots)),
+        "image_generator": (["create a picture", "generate an illustration", "make an artwork", "produce an image", "draw an image"], lambda user_input, filled_slots: logical_instance.dalle(user_input, filled_slots)),
+        "merge_pdfs": (["join pdf files", "consolidate pdfs", "unite pdfs", "blend pdfs", "fuse pdfs","merge pdfs"], lambda user_input, filled_slots: logical_instance.merge_pdfs(user_input, filled_slots)),
         "pass_check": {
             "patterns": ["verify my password", "evaluate password strength", "assess password security", "rate my password", "analyze password robustness", "check if my password (.*) is strong","could you assist me in determining if (.*) is a strong password or not", "check my password strength" ],
             "slots": {
@@ -1220,11 +1244,12 @@ def get_intents(logical_instance):
             },
             "handler": lambda user_input: logical_instance.checkapass(user_input)
             },
-        "png_to_pdf": (["png to pdf","change png to pdf", "transform png to pdf", "alter png to pdf", "turn png into pdf", "switch png to pdf"], logical_instance.png_to_pdf),
-        "say_something": ([" "], logical_instance.typeSomething),
-        "start_pomo": (["start pomo", "begin pomo", "start pomodoro", "begin pomodoro",], logical_instance.start_pomo),
-        "stop_pomo": (["stop pomo", "end pomo", "stop pomodoro", "end pomodoro",], logical_instance.stop_pomo),
-        "checkapikeys": (["check api keys", "verify api keys", "validate api keys", "confirm api keys", "test api keys"], logical_instance.checkapikeys),
-        "Cypher": (["cypher", "generate cypher","encript"], logical_instance.Cypher)
+        "png_to_pdf": (["png to pdf","change png to pdf", "transform png to pdf", "alter png to pdf", "turn png into pdf", "switch png to pdf"], lambda user_input, filled_slots: logical_instance.png_to_pdf(user_input, filled_slots)),
+        "start_pomo": (["start pomo", "begin pomo", "start pomodoro", "begin pomodoro",], lambda user_input, filled_slots: logical_instance.start_pomo(user_input, filled_slots)),
+        "stop_pomo": (["stop pomo", "end pomo", "stop pomodoro", "end pomodoro",], lambda user_input, filled_slots: logical_instance.stop_pomo(user_input, filled_slots)),
+        "checkapikeys": (["check api keys", "verify api keys", "validate api keys", "confirm api keys", "test api keys"], lambda user_input, filled_slots: logical_instance.checkapikeys(user_input, filled_slots)),
+        "Cypher": (["cypher", "generate cypher","encript"], lambda user_input, filled_slots: logical_instance.Cypher(user_input, filled_slots)),
+        "discuss_hobbies": (["what are your hobbies", "tell me about your hobbies", "what do you do for fun", "what are your interests", "what are your hobbies", "what do you like to do"], lambda user_input, filled_slots: logical_instance.discuss_hobbies(user_input, filled_slots)),
 }
+    logger.debug(f"Generated {len(intents)} intents")
     return intents

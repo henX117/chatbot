@@ -1,51 +1,63 @@
-import pyttsx3
-from openai import OpenAI
+import logging
+import asyncio
 from pathlib import Path
-import pygame
 import os
 import sys
-
-# Redirect stderr to a null device
-sys.stderr = open(os.devnull, 'w')
+import pygame
+from gtts import gTTS
+import tempfile
 
 class Speaker:
     def __init__(self, client=None, enable_tts=True):
+        self.logger = logging.getLogger(__name__)
+        self.logger.debug("Initializing Speaker class")
         self.client = client
         self.enable_tts = enable_tts
-        if not client:
-            import pyttsx3
-            self.engine = pyttsx3.init()
-            voices = self.engine.getProperty('voices')
-            self.engine.setProperty('voice', voices[1].id)
+        self.speech_queue = asyncio.Queue()
+        self.speech_task = None
+        pygame.mixer.init()
 
-    def speak(self, message):
+    async def speak(self, message):
         if not self.enable_tts:
-            return ""
-        if self.client is None:
-            self.engine.say(message)
-            self.engine.runAndWait()
-        else:
-            from pathlib import Path
+            self.logger.debug("TTS is disabled, skipping speech")
+            return
+        await self.speech_queue.put(message)
+        if self.speech_task is None or self.speech_task.done():
+            self.speech_task = asyncio.create_task(self._process_speech_queue())
+
+    async def _process_speech_queue(self):
+        while not self.speech_queue.empty():
+            message = await self.speech_queue.get()
+            await self._speak_pygame(message)
+
+    async def _speak_pygame(self, message):
+        self.logger.debug(f"Attempting to speak: {message[:50]}...")
+        try:
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.mp3') as temp_file:
+                tts = gTTS(text=message, lang='en')
+                tts.save(temp_file.name)
+                
+            pygame.mixer.music.load(temp_file.name)
+            pygame.mixer.music.play()
+            while pygame.mixer.music.get_busy():
+                await asyncio.sleep(0.1)
+            
+            os.unlink(temp_file.name)
+            self.logger.debug("Speech completed successfully")
+        except Exception as e:
+            self.logger.error(f"Error in _speak_pygame: {str(e)}")
+
+        await asyncio.sleep(0.1)  # Add a small delay here
+        self.logger.info(f"TTS: {message.encode('utf-8', errors='ignore').decode('utf-8')}")
+
+    async def stop(self):
+        if self.speech_task:
+            self.speech_task.cancel()
             try:
-                speech_file_path = Path(__file__).parent / "speech.mp3"
-                response = self.client.audio.speech.create(
-                    model="tts-1",
-                    voice="nova",
-                    input=message,
-                )
-                audio_content = response.content
-                with open(speech_file_path, 'wb') as audio_file:
-                    audio_file.write(audio_content)
-                try:
-                    pygame.mixer.init()
-                    pygame.mixer.music.load(str(speech_file_path))
-                    pygame.mixer.music.play()
-                    while pygame.mixer.music.get_busy():
-                        pygame.time.Clock().tick(10)
-                    pygame.mixer.quit()
-                except Exception as e:
-                    print(f"Error playing sound: {str(e)}")
-                finally:
-                    speech_file_path.unlink(missing_ok=True)
-            except Exception as e:
-                print(f"Error generating speech: {str(e)}")
+                await self.speech_task
+            except asyncio.CancelledError:
+                pass
+        if pygame.mixer.get_init():
+            pygame.mixer.music.stop()
+            pygame.mixer.quit()
+        self.logger.debug("TTS stopped")
