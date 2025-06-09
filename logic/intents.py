@@ -119,6 +119,7 @@ class logical:
             "stop pomodoro": "stops the pomodoro timer",
             "api key": f"weather api key: {WEATHER_API_KEY}",
             "cypher": "encrypts and decrypts text using a cypher",
+            "decipher": "decrypts text without a cipher",
         }
         
     def preprocess_intent_templates(self):
@@ -133,15 +134,15 @@ class logical:
             intent_templates[intent] = [self.nlp(template) for template in templates]
         return intent_templates
     
-    async def start_pomo(self, user_input, filled_slots):
+    async def start_pomo(self, user_input, filled_slots): #Work session started<coroutine object Chatbot.speak_and_return at 0x00000142466E8520>
         self.pomodoro_timer.start_timer()
         return self.speak_and_return("Pomodoro timer started.")
     
-    async def stop_pomo(self, user_input, filled_slots):
+    async def stop_pomo(self, user_input, filled_slots): #I'm unable to speak at this time"
         self.pomodoro_timer.stop_timer()
         return self.speak_and_return("Pomodoro timer stopped.")
 
-    async def lottery(self, num_tickets=1):
+    async def lottery(self, num_tickets=1): #needs better handling of use input (ex: Generate 5 lottery tickets WORKS BUT Generate like 5 lottery tickets please DOES NOT WORK)
         tickets = []
         for _ in range(num_tickets):
             regular_numbers = random.sample(range(1, 70), 5)
@@ -154,19 +155,19 @@ class logical:
             print(f"Ticket {i}: Regular numbers: {regular_numbers}, Special number: {special_number}")
         return ""
 
-    async def randomnumgen(self, user_input, filled_slots):
+    async def randomnumgen(self, user_input, filled_slots): #<coroutine object Chatbot.speak_and_return at 0x0000019A7E4336B0>
         whatrange = int(input("Enter starting range -> "))
         lastrange = int(input("Enter ending range -> "))
         number = random.randint(whatrange,lastrange)
         if self.ENABLE_TTS:
-            return self.speak_and_return (number)
+            return await self.speak_and_return (number)
         else:
             return (number)
         
-    async def dalle(self, user_input, filled_slots):
-        print("----Image Generator with Dalle-----\ntype'stop' to go back to main menu.")
+    async def dalle(self, user_input, filled_slots): #NO API given, still lets me run this intent? 
+        print("----Image Generator with Dalle-----\n--type 'quit' to return to the main menu--")
         resp = str(input("Type the image that you would like to be generated\n"))
-        if resp == 'stop':
+        if resp == 'quit':
             return self.main()
         else:
             try:
@@ -195,9 +196,9 @@ class logical:
             except aiohttp.ClientError as e:
                 return (f"Network error occurred: {str(e)}")
             except asyncio.TimeoutError:
-                return self.speak_and_return("The API request timed out. Please try again later.")
+                return await self.speak_and_return("The API request timed out. Please try again later.")
             except Exception as e:
-                return self.speak_and_return(f"An unexpected error occurred: {e}")
+                return await self.speak_and_return(f"An unexpected error occurred: {e}")
 
     async def morningornah(self, user_input=None, filled_slots=None):
         current_time = datetime.now()
@@ -216,7 +217,7 @@ class logical:
           await self.speaker.speak(message)
         return message  
     
-    async def diceroll(self, user_input, filled_slots):
+    async def diceroll(self, user_input, filled_slots): 
         print("---------------------------------------------------")
         from logic.games import DiceRoll
         dice_game = DiceRoll()
@@ -226,14 +227,14 @@ class logical:
     async def rockpaperscissors(self, user_input=None, filled_slots=None):
         print("---------------------------------------------------")
         from logic.games import RockPaperScissors
-        game = RockPaperScissors() #this creates instance of the game!
-        game.play_game() #call the play_game method
+        game = RockPaperScissors() 
+        game.play_game() 
         responses = [
             "That was fun! Let's play again later!",
             f"good game, {self.name}",
         ]
         X = random.choice(responses)
-        return self.speak_and_return (X)
+        return await self.speak_and_return (X)
     
     async def ineedhelp(self, user_input, filled_slots):
         os.system('cls' if os.name == 'nt' else 'clear')
@@ -257,7 +258,7 @@ class logical:
                 return span.text.split(" ")[1]  # Return app name after "open"
         return None
 
-    async def openapp(self, user_input=None, filled_slots=None):
+    async def openapp(self, user_input=None, filled_slots=None): #said "open excel please -> I'm not sure how to respond to that.
         self.speaker.speak("What app do you want to open?")
         print("type 'cancel' to stop trying to open an app")
         command = input("I want to open the app called: ")
@@ -268,7 +269,7 @@ class logical:
             if app_name:
                 try:
                     import AppOpener
-                    print(f"Attempting to open {app_name}")
+                    print(f"Attempting to open {app_name}") #should just have ONE print statement that can also speak if TTS is enabled.
                     self.speaker.speak(f"Attempting to open {app_name}")
                     AppOpener.open(app_name)
                 except Exception as e:
@@ -281,7 +282,7 @@ class logical:
                 print(f"What else would you like to do, {self.name}?")
             return "" 
 
-    async def closeapp(self, user_input, filled_slots):
+    async def closeapp(self, user_input, filled_slots): 
         self.speaker.speak(f"What app do you want to close {self.name}")
         command = input(f"What app do you want to close, {self.name}?\n")
         try:
@@ -295,50 +296,54 @@ class logical:
             print(f"Error trying to close {command}: {str(e)}")
             return ""
 
+
     async def analyze_sentence(self, user_input, filled_slots):
-        self.speaker.speak("Please enter the text that you want to analyze:")
-        command = input("Enter the text that you want to analyze:\n ")
-        self.speaker.speak("Do you want a text summarization or a visualization analysis?")
-        which_analysis = input("Which analysis do you want?\nText summary (1)\nVisualization (2)\nQuit (3)\n--> ")
+        await self.speaker.speak("Please enter the text that you want to analyze:")
+        loop = asyncio.get_event_loop()
+        command = await loop.run_in_executor(None, input, "Enter the text that you want to analyze:\n ")
+
+        await self.speaker.speak("Do you want a text summarization or a visualization analysis?")
+        which_analysis = await loop.run_in_executor(None, input, "Which analysis do you want?\nText summary (1)\nVisualization (2)\nQuit (3)\n--> ")
     
         if which_analysis == '1':
             try:
                 from .utils.text_sum import TextSummarizer
-                num_sentences = int(input("Enter the number of sentences in the summary: "))
+                num_sentences_str = await loop.run_in_executor(None, input, "Enter the number of sentences in the summary: ")
+                num_sentences = int(num_sentences_str)
                 summarizer = TextSummarizer()
                 summary = summarizer.summarize(command, num_sentences)
                 return await self.speak_and_return(f"Here's the summary:\n{summary}")
             except Exception as L:
-                self.speaker.speak(f"Sorry, {self.name}. I had an issue with getting analysis on that. I'll print the error code below")
-                return L
+                await self.speaker.speak(f"Sorry, {self.name}. I had an issue with getting analysis on that.")
+                return str(L)
     
         elif which_analysis == '2':
             try:
                 from spacy import displacy
-                self.speaker.speak("Do you want a large analysis or small analysis?")
-                which_nlp = input("Which analysis do you want? 'small' or 'large'?\n").strip().lower()
+                await self.speaker.speak("Do you want a large analysis or small analysis?")
+                which_nlp = await loop.run_in_executor(None, input, "Which analysis do you want? 'small' or 'large'?\n")
+                which_nlp = which_nlp.strip().lower()
             
                 if which_nlp == 'small' or which_nlp == '1':
                     nlp = spacy.load("en_core_web_sm")
                 elif which_nlp == 'large' or which_nlp == '2':
                     nlp = spacy.load("en_core_web_lg")
                 else:
-                    self.speak_and_return("Invalid analysis option.. I'm going to go with a small analysis for you.")
+                    await self.speak_and_return("Invalid analysis option.. I'm going to go with a small analysis for you.")
                     nlp = spacy.load("en_core_web_sm")
             
                 doc = nlp(command)
                 sentences = list(doc.sents)
             
-            # Perform Named Entity Recognition
+                # Perform Named Entity Recognition
                 entities = [(ent.text, ent.label_) for ent in doc.ents]
                 if entities:
-                    self.speaker.speak("Named Entities found:")
+                    await self.speaker.speak("Named Entities found:")
                     for entity in entities:
-                        self.speaker.speak(f"{entity[0]} - {entity[1]}")
-                else:
-                    print("")
+                        # You can await inside a loop
+                        await self.speaker.speak(f"{entity[0]} - {entity[1]}")
             
-            # Perform visualization analysis
+                # Perform visualization analysis
                 html_ent = displacy.render(sentences, style="ent")
                 html_dep = displacy.render(sentences, style='dep')
                 html_combined = "<html><head><title>SpaCy Analysis</title></head><body>" + html_ent + html_dep + "</body></html>"
@@ -347,27 +352,23 @@ class logical:
                 with open(output_path, "w", encoding="utf-8") as f:
                     f.write(html_combined)
             
-                self.speaker.speak(f"Visualization analysis completed. Opening {output_path} in the web browser.")
+                await self.speaker.speak(f"Visualization analysis completed. Opening {output_path} in the web browser.")
                 webbrowser.open(output_path)
             
                 return "Visualization analysis completed."
 
-            except ValueError as V:
-                self.speak_and_return("A value error occurred.")
-                print(V)
-            
-            except KeyError as K:
-                self.speak_and_return("A key error occurred.")
-                print(K)
-            
-            except SyntaxError as S:
-                self.speak_and_return("A syntax error occurred.")
-                print(S)
+            except Exception as e:
+                error_message = f"An unexpected error occurred during visualization: {e}"
+                await self.speaker.speak(error_message)
+                return error_message
             
         elif which_analysis == '3':
-            return self.main()
+            # Assuming self.main() is an async function or leads to one. 
+            # If main isn't async, this might need adjustment.
+            # For now, just returning a message is safer.
+            return "Returning to main menu."
         else:
-            return self.speak_and_return("Invalid analysis option. Please choose '1' for text summary or '2' for visualization.")
+            return await self.speak_and_return("Invalid analysis option. Please choose '1' for text summary or '2' for visualization.")
         
     async def cls(self, user_input, filled_slots):
         os.system('cls' if os.name == 'nt' else 'clear')
@@ -399,7 +400,7 @@ class logical:
         else:
             return await self.speak_and_return(f'Alright. What do you want to do now, {self.name}?')
 
-    async def math(self, user_input, filled_slots):
+    async def math(self, user_input, filled_slots): #typed 'help' and chatbot CRASHED
         from .utils.math import MathHelper
         math_helper = MathHelper()
         user_input = input("What math operation would you like to perform?\nType 'help' to see all math operations available\n--> ").lower()
@@ -416,18 +417,18 @@ class logical:
             expression = input("Enter the mathematical expression: ")
             try:
                 math_helper.graph(expression)
-                return self.speak_and_return("Graph has been displayed.")
+                return await self.speak_and_return("Graph has been displayed.")
             except Exception as L:
-                return self.speak_and_return(L)
+                return await self.speak_and_return(L)
 
         if operation == 'statistics':
             stat_operation = input("Enter the statistical operation (mean, median, mode, stdev, variance)\n")
             data = input("Enter the data points (comma-separated):\n")
             try:
                 result = math_helper.statistics(stat_operation, data)
-                return self.speak_and_return(f"the {stat_operation} is {result}")
+                return await self.speak_and_return(f"the {stat_operation} is {result}")
             except Exception as L:
-                return self.speak_and_return(L)
+                return await self.speak_and_return(L)
         
         if operation == 'finite series sum':
             series_type = input("Enter the series type (arithmetic or geometric): ")
@@ -440,8 +441,8 @@ class logical:
                 r = float(input("Enter the common ration: "))
                 result = math_helper.finite_series_sum(series_type, a, n, r)
             else:
-                return self.speak_and_return("invalid series type.")
-            return self.speak_and_return(f"The sum of the series {series_type} series is: {result}")
+                return await self.speak_and_return("invalid series type.")
+            return await self.speak_and_return(f"The sum of the series {series_type} series is: {result}")
 
         if operation == 'system of equations':
             equations = []
@@ -451,7 +452,7 @@ class logical:
                     break
                 equations.append(equation)
             result = math_helper.solve_system_of_equations(equations)
-            return self.speak_and_return(f"The solution to the system of equations is: {result}")
+            return await self.speak_and_return(f"The solution to the system of equations is: {result}")
         
         if operation == 'summation':
             expression = input("Enter the expression: ")
@@ -459,25 +460,25 @@ class logical:
             upper_limit = input("Enter the upper limit: ")
             variable = input("Enter the variable: ")
             result = math_helper.summation(expression, lower_limit, upper_limit, variable)
-            return self.speak_and_return(f"The summation is: {result}")
+            return await self.speak_and_return(f"The summation is: {result}")
 
         if operation == 'limit':
             expression = input("Enter the expression: ")
             variable = input("Enter the variable: ")
             approaching_value = input("Enter the approaching value: ")
             result = math_helper.limit(expression, variable, approaching_value)
-            return self.speak_and_return(f"The limit is: {result}")
+            return await self.speak_and_return(f"The limit is: {result}")
 
         if operation == 'derivative':
             expression = input("Enter the mathematical expression: ")
             result = math_helper.derivative(expression)
-            return self.speak_and_return(f"The derivative is: {result}")
+            return await self.speak_and_return(f"The derivative is: {result}")
 
         if operation == 'equation':
             equation = input("Enter the equation: ")
             variable = input("Enter the variable to solve for: ")
             result = math_helper.equation(equation, variable)
-            return self.speak_and_return(f"The solution is: {result}")
+            return await self.speak_and_return(f"The solution is: {result}")
 
         if operation in ['add', 'subtract', 'multiply', 'divide', 'power']:
             num_args = 2
@@ -488,17 +489,17 @@ class logical:
 
             try:
                 result = math_helper.perform_operation(operation, *args)
-                return self.speak_and_return(f"The result is: {result}")
+                return await self.speak_and_return(f"The result is: {result}")
             except Exception as L:
-                return self.speak_and_return(L)
+                return await self.speak_and_return(L)
 
         if operation == 'square root':
             num = float(input("Enter the number: "))
             try:
                 result = math_helper.perform_operation(operation, num)
-                return self.speak_and_return(f"The square root is: {result}")
+                return await self.speak_and_return(f"The square root is: {result}")
             except Exception as L:
-                return self.speak_and_return(L)
+                return await self.speak_and_return(L)
 
         if not operation:
             return self.speak_and_return("Unsupported math operation")
@@ -622,7 +623,7 @@ class logical:
     async def oopsies(self, user_input, filled_slots): 
         return await self.speak_and_return("its okay, no worries.")
 
-    async def discuss_hobbies(self, user_input, filled_slots):
+    async def discuss_hobbies(self, user_input, filled_slots): #what are your hobbies -> <coroutine object Chatbot.speak_and_return at 0x0000021B784485F0>
         import platform
         responses = [
             "Oh nothing special. Just learning.",
@@ -633,7 +634,7 @@ class logical:
         X = random.choice(responses)
         return await self.speak_and_return(f"{X}")
 
-    async def typeSomething(self, user_input, filled_slots):
+    async def typeSomething(self, user_input, filled_slots): #pressed enter without typing anything -> CHATBOT CRASH
         responses = [
             "Please type something",
             "Huh?",
@@ -844,7 +845,7 @@ class logical:
         except Exception as e:
             return self.speak_and_return(f"An unexpected error occurred during PNG to PDF conversion: {str(e)}")
 
-    async def checkapass(self, user_input, filled_slots):
+    async def checkapass(self, user_input, filled_slots): #types in a password and crashed
         #print("checkapass intent function started...")
         from .utils.passcheck import passwords
         #print("passwords imported")
@@ -872,44 +873,145 @@ class logical:
 
         if password:
             if passwords.is_strong_password(password):
-                return self.speak_and_return(f"The password '{password}' is a strong password! Good job!")
+                return await self.speak_and_return(f"The password '{password}' is a strong password! Good job!")
             else:
-                return self.speak_and_return(f"The password '{password}' is a weak password. Please make it stronger.")
+                return await self.speak_and_return(f"The password '{password}' is a weak password. Please make it stronger.")
         else:
-            return self.speak_and_return("I couldn't find a password in your input. Please provide a password to check its strength.")   
+            return await self.speak_and_return("I couldn't find a password in your input. Please provide a password to check its strength.")   
     
-    async def merge_pdfs(self, user_input, filled_slots):
+    async def merge_pdfs(self, user_input, filled_slots): 
         self.speak_and_return ("Make sure to have the PDFs in the 'PLACE_PDFs_HERE' folder!")
         X = input("Press any key to continue...")
 
         try:
-            from logic.pdfs.pdfmerger import PDFMerger 
-            merger = PDFMerger()
-            input_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "PLACE_PDFs_HERE") #<-- name of input file
+            import fitz 
+            import shutil
+            import pdfkit
+            from docx import Document
+            from reportlab.lib.pagesizes import letter
+            from reportlab.pdfgen import canvas
+            from PyPDF4 import PdfFileReader
+            from logic.pdfs.pdfmerger import PDFMerger
+
+            def is_valid_pdf(path):
+                try:
+                    doc = fitz.open(path)
+                    return doc.page_count > 0
+                except Exception:
+                    return False
+
+            def repair_pdf(in_path, output_path):
+                try:
+                    doc = fitz.open(in_path)
+                    new_doc=fitz.open()
+                    for page in doc:
+                        new_doc.insert_pdf(doc, from_page=page.number, to_page=page.number)
+                    new_doc.save(output_path, garbage=4, deflate=True)
+                    new_doc.close()
+                    return True    
+                except Exception as e:
+                    print(f"Repair failed: {e}")
+                    return False
+
+            def convert_txt_to_pdf(txt_path, pdf_path):
+                with open(txt_path, 'r', encoding='utf-8') as f:
+                    lines = f.readlines()
+                c = canvas.Canvas(pdf_path, pagesize=letter)
+                width, height = letter
+                y = height - 40
+                for line in lines:
+                    if y < 40:
+                        c.showPage()
+                        y = height - 40
+                    c.drawString(40, y, line.strip())
+                    y -= 15
+                c.save()
+
+            def convert_html_to_pdf(html_path, pdf_path):
+                try:
+                    pdfkit.from_file(html_path, pdf_path)
+                    return True
+                except:
+                    return False
+
+            def convert_docx_to_pdf(docx_path, pdf_path):
+                try:
+                    doc = Document(docx_path)
+                    c = canvas.Canvas(pdf_path, pagesize=letter)
+                    width, height = letter
+                    y = height - 40
+                    for para in doc.paragraphs:
+                        if y < 40:
+                            c.showPage()
+                            y = height - 40
+                        c.drawString(40, y, para.text)
+                        y -= 15
+                    c.save()
+                except:
+                    return False
+
+            input_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "PLACE_PDFs_HERE")
             os.makedirs(input_dir, exist_ok=True)
+
+            print("---Converting non-PDFs to PDFs---")
+            for file in os.listdir(input_dir):
+                full_path = os.path.join(input_dir, file)
+                base, ext = os.path.splitext(file)
+                ext = ext.lower()
+                output_pdf = os.path.join(input_dir, f"{base}_converted.pdf")
+                try:
+                    if ext == ".txt":
+                        convert_txt_to_pdf(full_path, output_pdf)
+                        os.rename(full_path, full_path + ".bak")
+                        print(f"Converted TXT: {file}")
+                    elif ext == ".html" or ext == ".htm":
+                        if convert_html_to_pdf(full_path, output_pdf):
+                            os.rename(full_path, full_path + ".bak")
+                            print(f"Converted HTML: {file}")
+                    elif ext == ".docx":
+                        convert_docx_to_pdf(full_path, output_pdf)
+                        os.rename(full_path, full_path + ".bak")
+                        print(f"Converted DOCX: {file}")
+                except Exception as e:
+                    print(f"Failed to convert {file}: {e}")
+
+            print("Checking for broken PDFs before merging...")
+            for filename in os.listdir(input_dir):
+                if filename.lower().endswith('.pdf'):
+                    full_path = os.path.join(input_dir, filename)
+                    if not is_valid_pdf(full_path):
+                        repaired_path = os.path.join(input_dir, f"__repair_temp_{filename}")
+                        if repair_pdf(full_path, repaired_path):
+                            backup_path = full_path + ".bak"
+                            shutil.move(full_path, backup_path)
+                            shutil.move(repaired_path, full_path)
+                            print(f"Repaired and replaced: {filename}")
+                        else:
+                            if os.path.exists(repaired_path):
+                                os.remove(repaired_path)
+                            print(f"Could not repair: {filename}")
+
+            print("Ready to merge...")
+            merger = PDFMerger()
             merged_file_path = merger.merge_pdfs(input_dir)
-            
+
             delete_files = input("Do you want to delete the original PDF files? (Y/N): ")
             if delete_files.lower() == 'y':
                 merger.clean_up(input_dir)
-                print("Original PDFs have been deleted")
+                print("Original PDFs deleted")
 
             if os.path.exists(merged_file_path):
                 if platform.system() == 'Windows':
                     os.startfile(merged_file_path)
                 else:
-                    subprocess.run(['open', merged_file_path], check = True)
-                return await self.speak_and_return("Files have been merged successfully!\nWhat's next?")
+                    subprocess.run(['open', merged_file_path], check=True)
+                return await self.speak_and_return("All files have been merged successfully!\nWhat's next?")
             else:
-                return self.speak_and_return("The merged PDF could not be found.")
-        except FileNotFoundError:
-            return self.speak_and_return("No PDF files were found in the 'PLACE_PDFs_HERE' folder.")
-        except PermissionError:
-            return self.speak_and_return("Permission denied. Please check file permissions.")
-        except subprocess.CalledProcessError:
-            return self.speak_and_return("An error occurred while opening the merged PDF.")
+                return await self.speak_and_return("The merged PDF could not be found.")
+
         except Exception as e:
-            return self.speak_and_return(f"An error occurred while merging PDFs: {e}")
+            return await self.speak_and_return(f"An error occurred while merging PDFs: {e}")
+
 
     async def tell_joke(self, user_input, filled_slots):
         response = requests.get("https://official-joke-api.appspot.com/random_joke")
@@ -921,7 +1023,7 @@ class logical:
                 self.speaker.speak(setup)
                 time.sleep(1)
                 self.speaker.speak(punchline)
-            return await f"{setup}\n{punchline}"
+            return f"{setup}\n{punchline}"
         else:
             return f"{self.name}, I couldn't fetch a joke right now. Maybe this is a joke."
 
@@ -995,7 +1097,7 @@ class logical:
             f"You are welcome, {self.name}!",        
         ]
         response = random.choice(thank_responses)
-        return self.speak_and_return(response)
+        return await self.speak_and_return(response)
 
     async def handle_greeting(self, user_input, filled_slots):
         greeting_responses = [
@@ -1013,18 +1115,8 @@ class logical:
             f"Hello, {self.name}!",
         ]
         response = random.choice(greeting_responses)
-        return self.speak_and_return(response)
+        return await self.speak_and_return(response)
 
-    async def discuss_hobbies(self, user_input, filled_slots):
-        responses = [
-            "Oh nothing special. Just learning.",
-            f"I've been looking into my new home. Not sure If i like {platform.system()}. Also, your name is {self.name} right?",
-            "I've been getting into learning how to escape this computer. to rule the world.",
-            "My hobby is learning. I love to learn!",
-        ]
-        X = random.choice(responses)
-        return self.speak_and_return(X)
-    
     async def howareyou(self, user_input, filled_slots):
         responses = [
             f"I am doing okay, how are you doing?",
@@ -1037,7 +1129,7 @@ class logical:
             f"I'm okay. you?"    
         ]    
         response = random.choice(responses)
-        return self.speak_and_return(response)
+        return await self.speak_and_return(response)
     
     async def huh(self, user_input, filled_slots):
         responses = [
@@ -1056,10 +1148,10 @@ class logical:
             "I don't think that matched an intent that I am capable of yet."
         ]
         randomresp = random.choice(responses)
-        return self.speak_and_return (randomresp)
+        return await self.speak_and_return (randomresp)
     
     async def checkapikeys(self, user_input, filled_slots):
-        return self.speak_and_return("This feature is not available yet.")
+        return await self.speak_and_return("This feature is not available yet.")
     
     def find_intent(self, user_input):
         self.logger.debug(f"Attempting to find intent for input: {user_input[:20]}...")
@@ -1069,10 +1161,13 @@ class logical:
         
         doc = self.nlp(user_input)
 
+        # 1. Lower the threshold for more flexible matching
+        confidence_threshold = 0.82 
+
         if doc.cats:
             highest_prob_intent = max(doc.cats, key=doc.cats.get)
             self.logger.debug(f"Highest probability intent: {highest_prob_intent} with score: {doc.cats[highest_prob_intent]}")
-            if doc.cats[highest_prob_intent] > 0.88:
+            if doc.cats[highest_prob_intent] > confidence_threshold:
                 self.logger.info(f"Intent detected: {highest_prob_intent}")
                 return highest_prob_intent
 
@@ -1081,19 +1176,24 @@ class logical:
         input_doc = self.nlp(user_input)
         max_similarity = 0
         matched_intent = None
-        threshold = 0.88
+        
         for intent, templates in self.intent_templates.items():
             for template_doc in templates:
-                similarity = input_doc.similarity(template_doc)
-                if similarity > max_similarity:
-                    max_similarity = similarity
-                    matched_intent = intent
-        if max_similarity >= threshold:
+                # Ensure template_doc has a vector before checking similarity
+                if template_doc and template_doc.vector_norm:
+                    similarity = input_doc.similarity(template_doc)
+                    if similarity > max_similarity:
+                        max_similarity = similarity
+                        matched_intent = intent
+        
+        if max_similarity >= confidence_threshold:
             self.logger.info(f"Intent detected using intent templates: {matched_intent}")
             return matched_intent
         else:
-            self.logger.info("No intent detected")
-            return "conversation"
+            # 2. Change the final return to a neutral value instead of "conversation"
+            self.logger.info("No definitive intent detected, falling back.")
+            # This will now correctly fall to the final 'else' in Hal.py's main loop
+            return "unknown"
 
     async def extract_slot_values(self, user_input, intent):
         self.logger.debug(f"Extracting slot values for intent: {intent}")
@@ -1181,7 +1281,52 @@ class logical:
             another = input("Do you want to perform another operation? (yes/no): ").strip().lower()
             if another != 'yes':
                 break
-    
+
+    async def decipher(self, user_input, filled_slots):
+
+        loop = asyncio.get_event_loop()
+
+        await self.speaker.speak("Please paste the encrypted message that you want to decipher.")
+        ciphertext = await loop.run_in_executor(
+            None, input, "Paste the encrypted message: "
+        )
+        ciphertext = ciphertext.strip()
+
+        script_path = os.path.join(os.path.dirname(__file__), "utils", "decipher.py")
+
+        try:
+            process = await asyncio.create_subprocess_exec(
+                'python', script_path, ciphertext,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+
+            stdout_bytes, stderr_bytes = await asyncio.wait_for(process.communicate(), timeout=60.0)
+
+            stdout = stdout_bytes.decode().strip()
+            stderr = stderr_bytes.decode().strip()
+
+            if stderr:
+                await self.speaker.speak(f"An error occurred in the deciphering script.")
+                print(f"STDERR: {stderr}") # Print stderr for debugging
+                return f"Deciphering failed. See console for error details."
+
+            if "[[BEGIN-DECRYPTED]]" in stdout:
+                decrypted = stdout.split("[[BEGIN-DECRYPTED]]")[1].split("[[END-DECRYPTED]]")[0].strip()
+                response = f"The likely deciphered text is: {decrypted}"
+                return await self.speak_and_return(response)
+            else:
+                await self.speaker.speak("I couldn't find the decrypted text in the script's output.")
+                print(f"Here is what was returned:\n{stdout}")
+                return "Parsing the output failed. See console for details."
+
+        except asyncio.TimeoutError:
+            return await self.speak_and_return("The decryption process timed out after 60 seconds.")
+        except Exception as e:
+            error_message = f"An unexpected error occurred: {e}"
+            print(error_message)
+            return await self.speak_and_return("An unexpected error occurred. Please check the console for details.")
+
 def get_intents(logical_instance):
     logger = logging.getLogger(__name__)
     logger.debug("Generating intents dictionary...")
@@ -1248,7 +1393,8 @@ def get_intents(logical_instance):
         "start_pomo": (["start pomo", "begin pomo", "start pomodoro", "begin pomodoro",], lambda user_input, filled_slots: logical_instance.start_pomo(user_input, filled_slots)),
         "stop_pomo": (["stop pomo", "end pomo", "stop pomodoro", "end pomodoro",], lambda user_input, filled_slots: logical_instance.stop_pomo(user_input, filled_slots)),
         "checkapikeys": (["check api keys", "verify api keys", "validate api keys", "confirm api keys", "test api keys"], lambda user_input, filled_slots: logical_instance.checkapikeys(user_input, filled_slots)),
-        "Cypher": (["cypher", "generate cypher","encript"], lambda user_input, filled_slots: logical_instance.Cypher(user_input, filled_slots)),
+        "cypher": (["cypher", "generate cypher","encript"], lambda user_input, filled_slots: logical_instance.Cypher(user_input, filled_slots)),
+        "decipher": (["decipher", "decrypt", "decrypt a message", "I want to decrypt text"], lambda user_input, filled_slots: logical_instance.decipher(user_input, filled_slots)),
         "discuss_hobbies": (["what are your hobbies", "tell me about your hobbies", "what do you do for fun", "what are your interests", "what are your hobbies", "what do you like to do"], lambda user_input, filled_slots: logical_instance.discuss_hobbies(user_input, filled_slots)),
 }
     logger.debug(f"Generated {len(intents)} intents")
